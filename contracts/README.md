@@ -63,7 +63,7 @@ task.json ─┐
 | `mapping.json` | 매핑 시험을 한 번 이상 시작한 경우 |
 | `observations.json` | `run_checks`를 시작한 경우 |
 | `ai_review.json` | `--review live`이고 모델 응답이 스키마와 봉투 검사를 통과한 경우 |
-| `report.json`, `report.md` | 항상 |
+| `report.json`, `report.md` | 항상. `--review live`로 채점이 끝나면 `report.md`에 모델 해설이 붙는다([docs/reporting.md](../docs/reporting.md)) |
 
 ## 모델 도구
 
