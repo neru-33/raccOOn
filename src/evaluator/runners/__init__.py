@@ -60,5 +60,17 @@ def open_session(
     snapshot_dir: Path,
     run_meta: dict[str, Any],
 ) -> RunnerSession:
-    """Create the runner registered for ``task['runner_id']``."""
-    raise NotImplementedError
+    """Create the runner registered for ``task['runner_id']``.
+
+    Raises ``RunnerConfigError`` (a contract error) for an unknown runner or an
+    unusable ``runner_config``. Tool methods raise ``ToolError`` with a
+    ``tool_error`` code (``not_started``, ``unknown_mapping``, ...) that the
+    host turns into the tool result.
+    """
+    from evaluator.runners.compose_postgres_k6 import RUNNER_ID, ComposePostgresK6Runner, RunnerConfigError
+
+    runners = {RUNNER_ID: ComposePostgresK6Runner}
+    runner_id = task.get("runner_id")
+    if runner_id not in runners:
+        raise RunnerConfigError(f"unknown runner_id {runner_id!r}; registered: {sorted(runners)}")
+    return runners[runner_id](task, task_dir, snapshot_dir, run_meta)

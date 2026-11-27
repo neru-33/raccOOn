@@ -539,5 +539,13 @@ def test_example_fixtures_back_runner_queries() -> None:
     schema_sql = (EXAMPLES_DIR / fixtures["schema_sql"]).read_text(encoding="utf-8")
     for table in ("events", "reservations"):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in schema_sql
-    assert "%(event_id)s" in fixtures["seed_event_sql"] and "%(capacity)s" in fixtures["seed_event_sql"]
-    assert "%(event_id)s" in fixtures["confirmed_count_sql"]
+    assert ":'event_id'" in fixtures["seed_event_sql"] and ":capacity" in fixtures["seed_event_sql"]
+    assert ":'event_id'" in fixtures["confirmed_count_sql"]
+
+
+def test_reservation_task_matches_contract_example() -> None:
+    root = contracts.CONTRACTS_DIR.parent / "tasks" / "reservation"
+    assert _load(root / "task.json") == _example("task.json")
+    assert (root / "fixtures" / "schema.sql").read_text(encoding="utf-8") == (
+        EXAMPLES_DIR / "fixtures" / "schema.sql"
+    ).read_text(encoding="utf-8")

@@ -11,5 +11,6 @@
 | Docker Compose | 제출 앱과 테스트 DB 기동 | [Apache-2.0](https://github.com/docker/compose/blob/main/LICENSE) |
 | PostgreSQL | 테스트 DB 서버 | [PostgreSQL License](https://www.postgresql.org/about/licence/) |
 | Grafana k6 | 별도 프로세스 또는 컨테이너에서 부하 검사 실행 | [AGPL-3.0](https://github.com/grafana/k6#license) |
+| psycopg | 실행기 검증용 테스트 앱(`tests/runner_app`) 컨테이너 빌드 시 설치 | [LGPL-3.0](https://github.com/psycopg/psycopg/blob/master/LICENSE.txt) |
 
 외부 도구에는 각 배포본의 조건이 적용됩니다. k6 바이너리나 컨테이너 이미지를 재배포할 경우 해당 배포본의 라이선스 고지 및 소스 제공 조건을 확인합니다.

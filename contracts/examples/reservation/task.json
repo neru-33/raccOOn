@@ -8,8 +8,18 @@
       "mode": "engine_managed"
     },
     "tools": [
-      {"id": "postgres", "image": "postgres:16"},
-      {"id": "k6", "image": "grafana/k6:1.0.0", "options": {"batch": 50, "batchPerHost": 50}}
+      {
+        "id": "postgres",
+        "image": "postgres:17-alpine"
+      },
+      {
+        "id": "k6",
+        "image": "grafana/k6:1.0.0",
+        "options": {
+          "batch": 50,
+          "batchPerHost": 50
+        }
+      }
     ],
     "app": {
       "compose_file": "compose.yaml",
@@ -23,25 +33,43 @@
           "format": "postgresql://<user>:<password>@<host>:<port>/<database>",
           "description": "평가 환경이 제공하는 테스트 DB 접속 정보"
         }
-      ]
+      ],
+      "database_url_env": "DATABASE_URL"
     },
     "fixtures": {
       "schema_sql": "fixtures/schema.sql",
       "reset_sql": "TRUNCATE reservations, events",
-      "seed_event_sql": "INSERT INTO events (id, capacity) VALUES (%(event_id)s, %(capacity)s)",
-      "confirmed_count_sql": "SELECT count(*) FROM reservations WHERE event_id = %(event_id)s AND status = 'CONFIRMED'"
+      "seed_event_sql": "INSERT INTO events (id, capacity) VALUES (:'event_id', :capacity)",
+      "confirmed_count_sql": "SELECT count(*) FROM reservations WHERE event_id = :'event_id' AND status = 'CONFIRMED'"
+    },
+    "inputs": {
+      "event_id": "seeded_event",
+      "user_id": "unique_user"
     },
     "probe": {
       "event_capacity": 5
     },
     "scenarios": {
       "reservation.functional": {
-        "event_capacity": 5
+        "kind": "operation_sequence",
+        "event_capacity": 5,
+        "expect_outputs": {
+          "confirmed": true
+        },
+        "metrics": {
+          "created": "create_reservation",
+          "retrieved": "get_reservation"
+        }
       },
       "reservation.concurrent": {
+        "kind": "concurrent_burst",
+        "operation": "create_reservation",
         "event_capacity": 1,
         "requests": 50,
-        "request_timeout_seconds": 10
+        "request_timeout_seconds": 10,
+        "confirmed_output": "confirmed",
+        "response_metric": "confirmed_responses",
+        "persisted_metric": "persisted_confirmed"
       }
     }
   },
@@ -49,12 +77,24 @@
     "create_reservation": {
       "description": "사용자가 이벤트 좌석 하나를 예약한다.",
       "inputs": {
-        "event_id": {"type": "id", "description": "예약할 이벤트 ID"},
-        "user_id": {"type": "id", "description": "예약하는 사용자 ID"}
+        "event_id": {
+          "type": "id",
+          "description": "예약할 이벤트 ID"
+        },
+        "user_id": {
+          "type": "id",
+          "description": "예약하는 사용자 ID"
+        }
       },
       "outputs": {
-        "reservation_id": {"type": "id", "description": "생성된 예약 ID"},
-        "confirmed": {"type": "bool", "description": "예약이 확정되었는지 여부"}
+        "reservation_id": {
+          "type": "id",
+          "description": "생성된 예약 ID"
+        },
+        "confirmed": {
+          "type": "bool",
+          "description": "예약이 확정되었는지 여부"
+        }
       }
     },
     "get_reservation": {
@@ -67,19 +107,37 @@
         }
       },
       "outputs": {
-        "reservation_id": {"type": "id", "description": "조회된 예약 ID"},
-        "confirmed": {"type": "bool", "description": "예약이 확정되었는지 여부"}
+        "reservation_id": {
+          "type": "id",
+          "description": "조회된 예약 ID"
+        },
+        "confirmed": {
+          "type": "bool",
+          "description": "예약이 확정되었는지 여부"
+        }
       }
     }
   },
   "metrics": {
     "reservation.functional": {
-      "rounds": [1],
-      "values": {"created": "bool", "retrieved": "bool"}
+      "rounds": [
+        1
+      ],
+      "values": {
+        "created": "bool",
+        "retrieved": "bool"
+      }
     },
     "reservation.concurrent": {
-      "rounds": [1, 2, 3],
-      "values": {"confirmed_responses": "int", "persisted_confirmed": "int"}
+      "rounds": [
+        1,
+        2,
+        3
+      ],
+      "values": {
+        "confirmed_responses": "int",
+        "persisted_confirmed": "int"
+      }
     }
   },
   "rules": [
@@ -90,7 +148,13 @@
       "test_id": "reservation.functional",
       "round": 1,
       "points": 8,
-      "conditions": [{"metric": "created", "op": "eq", "value": true}]
+      "conditions": [
+        {
+          "metric": "created",
+          "op": "eq",
+          "value": true
+        }
+      ]
     },
     {
       "id": "functional.retrieve",
@@ -99,7 +163,13 @@
       "test_id": "reservation.functional",
       "round": 1,
       "points": 8,
-      "conditions": [{"metric": "retrieved", "op": "eq", "value": true}]
+      "conditions": [
+        {
+          "metric": "retrieved",
+          "op": "eq",
+          "value": true
+        }
+      ]
     },
     {
       "id": "concurrent.single_confirmation",
@@ -107,10 +177,24 @@
       "description": "정원 1인 이벤트에 동시 요청 50건, 회차마다 확정 1건",
       "test_id": "reservation.concurrent",
       "points": 8,
-      "veto_if_any_round": [{"metric": "persisted_confirmed", "op": "gte", "value": 2}],
+      "veto_if_any_round": [
+        {
+          "metric": "persisted_confirmed",
+          "op": "gte",
+          "value": 2
+        }
+      ],
       "conditions": [
-        {"metric": "confirmed_responses", "op": "eq", "value": 1},
-        {"metric": "persisted_confirmed", "op": "eq", "value": 1}
+        {
+          "metric": "confirmed_responses",
+          "op": "eq",
+          "value": 1
+        },
+        {
+          "metric": "persisted_confirmed",
+          "op": "eq",
+          "value": 1
+        }
       ]
     }
   ],
@@ -129,7 +213,11 @@
         "strong": "선택한 구조가 예상 변경이나 장애 상황을 어떻게 다루는지 코드 근거로 설명할 수 있다."
       },
       "max_points": 15,
-      "points_by_rating": {"needs_improvement": 5, "meets": 10, "strong": 15}
+      "points_by_rating": {
+        "needs_improvement": 5,
+        "meets": 10,
+        "strong": 15
+      }
     },
     {
       "id": "code_quality",
@@ -141,7 +229,11 @@
         "strong": "예약 불변식이 일관되게 적용되고 중요한 경계 조건을 테스트가 다룬다."
       },
       "max_points": 20,
-      "points_by_rating": {"needs_improvement": 7, "meets": 14, "strong": 20}
+      "points_by_rating": {
+        "needs_improvement": 7,
+        "meets": 14,
+        "strong": 20
+      }
     },
     {
       "id": "documentation",
@@ -153,7 +245,11 @@
         "strong": "대표 실패 응답, 검증 방법, 설계 결정과 제약이 구현에 맞게 설명된다."
       },
       "max_points": 15,
-      "points_by_rating": {"needs_improvement": 5, "meets": 10, "strong": 15}
+      "points_by_rating": {
+        "needs_improvement": 5,
+        "meets": 10,
+        "strong": 15
+      }
     },
     {
       "id": "extra_feature",
@@ -165,7 +261,12 @@
         "strong": "실제 사용자가 겪을 문제를 해결하고 예외 처리와 확인 근거가 있다."
       },
       "max_points": 10,
-      "points_by_rating": {"needs_improvement": 3, "meets": 7, "strong": 10, "not_applicable": 0},
+      "points_by_rating": {
+        "needs_improvement": 3,
+        "meets": 7,
+        "strong": 10,
+        "not_applicable": 0
+      },
       "verification_rules": []
     }
   ],
