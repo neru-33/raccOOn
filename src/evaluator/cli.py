@@ -113,11 +113,13 @@ def _run_agent(task: dict, snapshot_dir: Path, session: runners.RunnerSession,
         return _result(status, mapping=mapping, model=model, error=error)
 
 
-def _run_review(task: dict, snapshot_dir: Path, result: dict, model: models.ModelClient | None) -> dict:
+def _run_review(task: dict, snapshot_dir: Path, result: dict, model: models.ModelClient | None, run_meta: dict) -> dict:
     try:
         if model is None:
             model = _load_model()
-        response = review.review(task, snapshot_dir, result["observations"], result["mapping_artifact"], "live", model)
+        response = review.review(
+            task, snapshot_dir, result["observations"], result["mapping_artifact"], "live", model, run_meta=run_meta,
+        )
     except Exception:
         error = _error("review_unavailable", "review", "Quality review failed before returning its result")
         return {"status": "unavailable", "review_artifact": None, "error": error}
@@ -233,7 +235,7 @@ def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_
     review_result = {"status": "off", "review_artifact": None, "error": None}
     report = core.evaluate(task, run_meta, result, review_result, snapshot_dir)
     if report["run_status"] == "graded" and args.review == "live":
-        review_result = _run_review(task, snapshot_dir, result, model)
+        review_result = _run_review(task, snapshot_dir, result, model, run_meta)
         report = core.evaluate(task, run_meta, result, review_result, snapshot_dir)
     if cleanup_error is not None:
         report["errors"].append(cleanup_error)
