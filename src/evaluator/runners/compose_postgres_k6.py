@@ -224,6 +224,7 @@ class ComposePostgresK6Runner:
                 raise _StartFailure("app_build", err.cause, str(err), err.log) from err
             self.project.compose_file = self._build.compose_file
             self.project.project_dir = self._build.project_dir
+            self.app_service = self._build.service
         for image in (self.db_image, self.k6_tool["image"]):
             try:
                 dc.ensure_image(image)

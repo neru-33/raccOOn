@@ -95,7 +95,7 @@ v1 안에서 값이나 정의를 추가할 수 있다. 기존 값의 이름이�
 | 비교 연산 | `common.schema.json#/$defs/comparison_op` | `eq`, `ne`, `gt`, `gte`, `lt`, `lte` |
 | 배점 규칙 종류 | `task.schema.json#/$defs/rule` | `award_if`, `award_per_round` |
 | 오류 코드 | `common.schema.json#/$defs/error_code` | 8종 |
-| 제출물 실행 규약 | `runner_config.app` (`env` 포함) | 기동 방식(Compose에는 앱만), 포트, 준비 확인 경로, 주입 환경 변수의 이름·형식 |
+| 제출물 실행 규약 | `runner_config.app` (`env` 포함) | 기동 방식(Compose·Dockerfile·자동 빌드, 앱 서비스 자동 선택), 포트, 준비 확인 경로, 주입 환경 변수의 이름·형식 |
 | 매핑 실패 단계 | `mapping.schema.json#/$defs/probe_stage` | 6종 |
 | 모델 도구 | `tools.schema.json` | 에이전트 6종(읽기 3종 포함). 리뷰 세션은 읽기 3종만 |
 | 실행기 설정 | `task.schema.json#/$defs/runner_config` | 공통 `database`, `tools`. 나머지 키는 실행기 소유 |
