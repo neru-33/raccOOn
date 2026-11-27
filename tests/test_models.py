@@ -120,6 +120,21 @@ def test_compatibility_mode_uses_prompt_and_remembers_unsupported_parallel_optio
     assert client.model_info["endpoint_host"] == "gateway.example"
 
 
+def test_reasoning_effort_none_is_sent_when_configured(sdk):
+    client = load_client({
+        "EVALUATOR_API_KEY": "test-key", "EVALUATOR_MODEL": "model-name",
+        "EVALUATOR_REASONING_EFFORT": "none",
+    })
+    create = sdk.OpenAI.return_value.chat.completions.create
+    create.return_value = completion("{}")
+    tools = contracts.tool_definitions("agent")
+
+    client.complete([], tools, None)
+    client.complete([], [], contracts.review_output_schema())
+
+    assert [call.kwargs["reasoning_effort"] for call in create.call_args_list] == ["none", "none"]
+
+
 @pytest.mark.parametrize(("error", "message"), [
     (FakeStatusError(401, "private credentials"), "Model endpoint returned HTTP 401"),
     (FakeTimeoutError("private endpoint details"), "Model request timed out"),
@@ -145,6 +160,7 @@ def test_registered_client_uses_its_own_configuration():
     ({}, "EVALUATOR_API_KEY"),
     ({"EVALUATOR_MODEL_CLIENT": "not-a-class"}, "EVALUATOR_MODEL_CLIENT"),
     ({"EVALUATOR_RESPONSE_FORMAT": "json_object"}, "EVALUATOR_RESPONSE_FORMAT"),
+    ({"EVALUATOR_REASONING_EFFORT": "auto"}, "EVALUATOR_REASONING_EFFORT"),
     ({"EVALUATOR_BASE_URL": "file:///tmp/client"}, "EVALUATOR_BASE_URL"),
 ])
 def test_invalid_configuration_fails_before_sdk_initialization(sdk, env, variable):
