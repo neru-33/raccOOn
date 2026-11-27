@@ -1,6 +1,6 @@
 # 라이선스 안내
 
-[Apache License 2.0](LICENSE)은 raccOOn이 배포 권한을 가진 자체 개발 코드와 그 문서에 적용됩니다. 대학 프로젝트 템플릿과 `assets/raccOOn-pixel-dot-arcade.svg`는 별도 라이선스 표기를 확인할 수 없어 이 부여 범위에서 제외합니다.
+[Apache License 2.0](LICENSE)은 raccOOn이 배포 권한을 가진 자체 개발 코드와 그 문서, 팀이 제작한 로고(`assets/raccOOn-pixel-dot-arcade.svg`, `assets/raccOOn-cli_ascii_logo.txt`)에 적용됩니다. 대학 프로젝트 템플릿은 별도 라이선스 표기를 확인할 수 없어 이 부여 범위에서 제외합니다.
 
 ## 설계상 사용하는 외부 도구
 
