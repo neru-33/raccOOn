@@ -305,19 +305,47 @@ def test_review_output_schema_is_strict_compatible() -> None:
     _assert_strict_compatible(contracts.review_output_schema())
 
 
-def test_review_session_has_no_tools() -> None:
-    assert contracts.tool_definitions("review") == []
+READ_TOOLS = {"list_files", "search_code", "read_source"}
 
 
-def test_tool_definitions_are_self_contained() -> None:
-    defs = contracts.tool_definitions("agent")
-    assert [d["function"]["name"] for d in defs] == contracts.tool_names("agent")
+def test_review_session_has_only_read_tools() -> None:
+    assert set(contracts.tool_names("review")) == READ_TOOLS
+    assert READ_TOOLS <= set(contracts.tool_names("agent"))
+
+
+@pytest.mark.parametrize("tool_set", ["agent", "review"])
+def test_tool_definitions_are_self_contained(tool_set: str) -> None:
+    defs = contracts.tool_definitions(tool_set)
+    assert [d["function"]["name"] for d in defs] == contracts.tool_names(tool_set)
     text = json.dumps(defs)
     assert "$ref" not in text and "$defs" not in text
     for d in defs:
         assert d["type"] == "function"
         assert d["function"]["description"]
         assert d["function"]["parameters"]["type"] == "object"
+
+
+def test_every_tool_has_args_and_result_schemas() -> None:
+    defs = contracts.load_schema("tools.schema.json")["$defs"]
+    for name in set(contracts.tool_names("agent")) | set(contracts.tool_names("review")):
+        assert f"{name}_args" in defs and f"{name}_result" in defs, name
+
+
+def test_read_source_result_uses_numbered_lines() -> None:
+    validator = _tools_validator("read_source_result")
+    validator.validate(
+        {
+            "path": "src/app.py",
+            "start_line": 12,
+            "end_line": 13,
+            "content": "12\tdef reserve(event_id, user_id):\n13\t    ...",
+            "total_lines": 40,
+            "truncated": False,
+        }
+    )
+    validator.validate(
+        {"path": "empty.txt", "start_line": 1, "end_line": 0, "content": "", "total_lines": 0, "truncated": False}
+    )
 
 
 def test_probe_mapping_parameters_accept_example_candidates() -> None:
@@ -447,3 +475,9 @@ def test_submission_env_declares_names_and_formats_only() -> None:
     for entry in env:
         assert set(entry) == {"name", "format", "description"}
         assert entry["name"].isupper() and entry["name"].replace("_", "").isalnum()
+
+
+def test_submission_app_declares_health_path() -> None:
+    app = _example("task.json")["runner_config"]["app"]
+    assert app["health_path"].startswith("/")
+    assert isinstance(app["ready_timeout_seconds"], int) and app["ready_timeout_seconds"] > 0

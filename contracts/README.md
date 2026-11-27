@@ -61,16 +61,20 @@ task.json ─┐
 
 ## 모델 도구
 
-평가 에이전트 세션에만 도구를 제공한다. 리뷰 세션은 도구가 없다.
+읽기 도구 세 개는 평가 에이전트와 리뷰 세션이 함께 쓰고, 리뷰 세션은 읽기 도구만 쓴다. 어떤 파일을 얼마나 읽을지는 모델이 정하며, 호스트는 도구 호출 예산과 결과 크기만 제한한다.
 
-| 도구 | 구현 위치 | 인자 | 결과 |
-| --- | --- | --- | --- |
-| `read_source` | `evaluator.snapshot.read_source` | `path` | 파일 내용, 전체 줄 수, 잘림 여부 |
-| `start_submission` | 실행기 `start()` | 없음 | 준비 상태, 실행 중인 제출물에서 얻은 사용법 자료(`discovered`, 예: OpenAPI 문서), 평가 도구 상태. 실패 시 원인(`environment`/`submission`)과 로그 발췌 |
-| `probe_mapping` | 실행기 `probe_mapping()` | `candidate`, 선택 `documented_operations` | `verified` + `mapping_id`, 또는 실패 단계·HTTP 상태 |
-| `run_checks` | 실행기 `run_checks()` | `mapping_id` | 검사 완료 여부와 관측 행 수. 호출 후 세션 종료 |
+| 도구 | 세션 | 구현 위치 | 인자 | 결과 |
+| --- | --- | --- | --- | --- |
+| `list_files` | 에이전트, 리뷰 | `evaluator.snapshot.list_files` | 선택 `path_prefix` | 파일 경로와 줄 수(최대 2,000개). Git 저장소면 추적 파일만 |
+| `search_code` | 에이전트, 리뷰 | `evaluator.snapshot.search_code` | `query`, 선택 `path_prefix` | 일치한 경로·줄 번호·줄 내용(최대 100건). 고정 문자열, 대소문자 무시 |
+| `read_source` | 에이전트, 리뷰 | `evaluator.snapshot.read_source` | `path`, 선택 `start_line`·`end_line` | 줄 번호를 붙인 내용(한 번에 최대 400줄), 전체 줄 수, 잘림 여부 |
+| `start_submission` | 에이전트 | 실행기 `start()` | 없음 | 준비 상태, 실행 중인 제출물에서 얻은 사용법 자료(`discovered`, 예: OpenAPI 문서), 평가 도구 상태. 실패 시 원인(`environment`/`submission`)과 로그 발췌 |
+| `probe_mapping` | 에이전트 | 실행기 `probe_mapping()` | `candidate`, 선택 `documented_operations` | `verified` + `mapping_id`, 또는 실패 단계·HTTP 상태 |
+| `run_checks` | 에이전트 | 실행기 `run_checks()` | `mapping_id` | 검사 완료 여부와 관측 행 수. 호출 후 세션 종료 |
 
-`read_source`는 스냅샷 밖 경로, 절대 경로, `..`, 스냅샷에서 제외된 파일과 비밀 파일을 `path_denied`로 거부한다. 도구 호출이 실패하면 `{"error": {"code", "message"}}`를 돌려준다. `evaluator.contracts.tool_definitions("agent" | "review")`는 참조를 펼친 Chat Completions `tools` 형식의 함수 정의를 만든다. 일부 엔드포인트가 받지 않는 키워드(`pattern`, `propertyNames` 등)는 빼고 보내며, 호스트는 받은 인자를 원래 스키마로 다시 검증한다.
+**줄 번호 형식.** `read_source`의 `content`는 각 줄을 `<줄 번호>\t<내용>`으로 이어 붙인다. 줄 번호는 원본 파일 기준으로 1부터 세며, 범위를 지정하거나 잘라도 원본 번호를 유지한다. 리뷰가 인용하는 `source_refs`와 코어의 줄 범위 확인이 같은 기준을 쓴다.
+
+읽기 도구는 스냅샷 밖 경로, 절대 경로, `..`, 스냅샷에서 제외된 파일과 비밀 파일을 `path_denied`로 거부한다. 도구 호출이 실패하면 `{"error": {"code", "message"}}`를 돌려준다. `evaluator.contracts.tool_definitions("agent" | "review")`는 참조를 펼친 Chat Completions `tools` 형식의 함수 정의를 만든다. 일부 엔드포인트가 받지 않는 키워드(`pattern`, `propertyNames` 등)는 빼고 보내며, 호스트는 받은 인자를 원래 스키마로 다시 검증한다.
 
 ## 매핑 후보
 
@@ -109,13 +113,14 @@ task.json ─┐
 
 ## 제출물 실행 규약
 
-실행기가 제출물에 요구하는 조건(기동 방식, 포트, 주입하는 환경 변수)은 `task.json`의 `runner_config.app`에 선언하고, 문제지에도 같은 내용을 안내한다. 실행기는 이 선언대로 제출물을 기동하고 값을 주입한다. 문제지와 실행기가 같은 선언을 따르므로, 규약을 지킨 제출물이 평가 쪽 설정 차이 때문에 실패하지 않는다.
+실행기가 제출물에 요구하는 조건(기동 방식, 포트, 준비 확인 경로, 주입하는 환경 변수)은 `task.json`의 `runner_config.app`에 선언하고, 문제지에도 같은 내용을 안내한다. 실행기는 이 선언대로 제출물을 기동하고 값을 주입한다. 문제지와 실행기가 같은 선언을 따르므로, 규약을 지킨 제출물이 평가 쪽 설정 차이 때문에 실패하지 않는다.
 
 ```json
 "app": {
   "compose_file": "compose.yaml",
   "service": "app",
   "port": 8080,
+  "health_path": "/health",
   "ready_timeout_seconds": 60,
   "env": [
     {
@@ -127,6 +132,8 @@ task.json ─┐
 }
 ```
 
+- 제출본의 Compose 파일에는 앱 서비스만 둔다. DB 같은 의존 서비스는 실행기가 자체 덮어쓰기 파일로 붙이고, 접속 정보를 `env`에 선언된 이름으로 주입한다.
+- 준비 확인: 실행기는 `ready_timeout_seconds` 안에 `GET <health_path>`가 200을 돌려주면 제출물이 준비된 것으로 본다.
 - `env`에는 이름, 형식, 설명만 적는다. 실제 값은 실행기가 실행마다 만들어 주입하며 설정 파일, 모델 입력, 리포트에 남기지 않는다.
 - `runner_config.database.url_env`는 방향이 반대다. 운영자가 실행기에 외부 DB 접속 정보를 넘기는 환경 변수 이름이다.
 - 실행기는 자체 인프라(컨테이너, 실행기에서 DB 접속)를 먼저 확인한 뒤 제출물의 준비 상태를 기다린다. 인프라가 실패하면 `execution_error`, 인프라는 정상인데 제출물이 기동·준비되지 않으면 `submission_start_failed`로 기록하고 로그 발췌를 남긴다. 두 경우 모두 점수는 보류한다.
@@ -148,7 +155,7 @@ task.json ─┐
 
 가설은 제출물의 결함 원인에 대한 검증되지 않은 설명이다. 코드 위치가 확인되면 `hypothesis`, 아니면 `insufficient_evidence`로 표시한다.
 
-리뷰 세션은 v1에서 도구 없이 구조화 출력만 사용한다. 품질 근거는 코어가 결정적으로 확인할 수 있는 코드 위치와 실행 관측값으로 한정한다.
+리뷰 세션은 읽기 도구로 제출물을 탐색한 뒤 구조화 출력으로 판정을 반환한다. 품질 근거는 코어가 결정적으로 확인할 수 있는 코드 위치와 실행 관측값으로 한정한다.
 
 ## 점수와 상태
 
