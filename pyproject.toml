@@ -9,7 +9,7 @@ description = "Config-driven evaluation engine for open-ended coding assignments
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
-dependencies = ["jsonschema>=4.18", "python-dotenv>=1.0"]
+dependencies = ["jsonschema>=4.18", "python-dotenv>=1.0", "rich>=13.9"]
 
 [project.optional-dependencies]
 model = ["openai>=2.8"]
@@ -23,6 +23,7 @@ where = ["src", "."]
 include = ["evaluator", "evaluator.*", "contracts.schemas"]
 
 [tool.setuptools.package-data]
+evaluator = ["assets/*.txt"]
 "contracts.schemas" = ["*.schema.json"]
 
 [tool.pytest.ini_options]
