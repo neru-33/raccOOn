@@ -13,8 +13,13 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
+from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
+
 CONTRACTS_DIR = Path(__file__).resolve().parents[2] / "contracts"
 SCHEMAS_DIR = CONTRACTS_DIR / "schemas"
+if not SCHEMAS_DIR.is_dir():
+    SCHEMAS_DIR = Path(__file__).resolve().parents[1] / "contracts" / "schemas"
 
 # Keywords removed from model-facing tool parameters. Some OpenAI-compatible
 # endpoints reject them; the host validates tool arguments against the full
@@ -48,6 +53,17 @@ def load_schema(name: str) -> dict[str, Any]:
 
 def schema_names() -> list[str]:
     return sorted(p.name for p in SCHEMAS_DIR.glob("*.schema.json"))
+
+
+@lru_cache(maxsize=1)
+def _registry() -> Registry:
+    schemas = (_load(name) for name in schema_names())
+    return Registry().with_resources((schema["$id"], Resource.from_contents(schema)) for schema in schemas)
+
+
+def validate(name: str, instance: Any) -> None:
+    """Validate against the full contract, resolving references locally."""
+    Draft202012Validator(_load(name), registry=_registry()).validate(instance)
 
 
 def _resolve_pointer(doc: dict[str, Any], fragment: str) -> Any:

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ._review import review_report
-from ._scoring import grade_rules, index_observations, validate_scoring_config
+from ._scoring import grade_rules, index_observations, validate_scoring_config as validate_scoring_config
 
 _ENVELOPE = ("schema_version", "run_id", "task_id", "submission_sha256")
 
