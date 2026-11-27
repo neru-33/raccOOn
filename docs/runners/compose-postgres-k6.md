@@ -1,0 +1,82 @@
+# 실행기 `compose-postgres-k6`
+
+Docker Compose로 제출 앱을 띄우고, PostgreSQL 테스트 DB를 붙여 회차마다 초기화·시드·집계하며, 동시 요청은 k6로 보낸다. 구현은 `src/evaluator/runners/compose_postgres_k6.py`이고, `task.json`의 `runner_id`가 `compose-postgres-k6`이면 `evaluator.runners.open_session`이 이 실행기를 만든다.
+
+## 필요 환경
+
+- Docker Engine과 Docker Compose v2
+- 실행 중 내려받거나 사용하는 이미지: `runner_config.tools`의 `postgres`, `k6` 이미지
+- 파이썬 추가 의존성 없음. DB 조작은 DB 컨테이너 안의 `psql`, HTTP는 표준 라이브러리로 한다.
+
+## 실행 순서
+
+| 단계 | 동작 | 실패 시 |
+| --- | --- | --- |
+| 1 | Docker 데몬 확인 | `environment` |
+| 2 | 제출본 Compose 파일 확인 | `submission` |
+| 3 | 도구 이미지 준비(없으면 pull) | `environment` |
+| 4 | 덮어쓰기 파일 작성 후 `docker compose config` | `submission` |
+| 5 | DB 서비스 기동(`--wait`), `fixtures.schema_sql` 적용 | `environment` |
+| 6 | 앱 빌드·기동(`--no-deps`), 앱 포트를 `127.0.0.1`의 임의 포트로 공개 | `submission` |
+| 7 | `ready_timeout_seconds` 안에 `GET health_path`가 200이면 준비 완료. 앱 컨테이너가 먼저 종료되면 즉시 실패 | `submission` |
+| 8 | 앱에서 OpenAPI 문서를 찾아 `discovered`에 담음(`/openapi.json`, `/v3/api-docs`, `/swagger.json`, `/docs/openapi.json`) | 없으면 빈 배열 |
+
+`start()`가 실패하면 `start_submission_result.error`에 `stage`, `cause`, 로그 발췌(DB 비밀번호는 가림)를 담는다. Compose 프로젝트 이름은 `raccoon-<run_id>`이고, `close()`는 `down -v --remove-orphans`로 이 실행의 컨테이너·볼륨·네트워크를 모두 지운다.
+
+## 덮어쓰기 파일
+
+실행기는 제출본 Compose 파일 위에 다음 서비스를 붙인다.
+
+| 서비스 | 내용 |
+| --- | --- |
+| 앱(`app.service`) | `app.database_url_env` 이름으로 DB 접속 URL 주입, `app.port`를 `127.0.0.1`의 임의 포트로 공개 |
+| `raccoon-db` | `postgres` 도구 이미지, 실행마다 무작위 비밀번호, `pg_isready` 헬스체크 |
+| `raccoon-k6` | `k6` 도구 이미지, `tools` 프로필(검사 때만 `docker compose run`으로 실행) |
+
+## `runner_config` 키
+
+| 키 | 내용 |
+| --- | --- |
+| `database.mode` | `engine_managed`만 구현되어 있다. `external`은 아직 `environment` 오류로 끝난다 |
+| `tools` | `postgres`, `k6` 항목 필수. k6의 `options.batch`, `options.batchPerHost` 사용 |
+| `app` | `compose_file`, `service`, `port`, `health_path`, `ready_timeout_seconds`, `env`, `database_url_env`(`env`에 선언된 이름 중 하나) |
+| `fixtures.schema_sql` | `task.json` 기준 경로의 SQL 파일. 기동 시 한 번 적용 |
+| `fixtures.reset_sql` | 각 검사 회차 전에 실행 |
+| `fixtures.seed_event_sql` | 시험·회차마다 이벤트를 넣는다. psql 변수 `:'event_id'`, `:capacity` 사용 |
+| `fixtures.confirmed_count_sql` | 동시 요청 뒤 확정 건수를 센다. `:'event_id'` 사용, 결과는 정수 한 개 |
+| `inputs` | `from`으로 연결되지 않은 동작 입력의 값 출처. `seeded_event`(이번 시험·회차의 이벤트 ID), `unique_user`(요청마다 다른 사용자 ID) |
+| `probe.event_capacity` | 매핑 시험용 이벤트의 정원 |
+| `scenarios.<test_id>` | 검사 방식. 아래 두 종류 |
+
+### 검사 방식
+
+**`operation_sequence`**: 회차마다 새 이벤트(`event_capacity`)를 만들고 확인된 매핑의 동작을 선언 순서대로 한 번씩 호출한다. `metrics`는 지표 이름에서 동작 이름으로의 대응이며, 그 동작이 성공하고 `expect_outputs`의 값과 응답 출력이 같으면 `true`다. 앞 동작이 실패해 뒤 동작을 부르지 못하면 뒤 지표는 `false`다. 응답을 받지 못한 요청이 있으면 그 회차는 실행 오류다.
+
+**`concurrent_burst`**: 회차마다 새 이벤트(`event_capacity`)를 만들고 `operation`을 `requests`건 한 번에 보낸다(k6 `http.batch`). 응답 중 `success_codes`에 들고 `confirmed_output` 필드가 확정으로 해석된 수를 `response_metric`, 모든 응답을 받은 뒤 `confirmed_count_sql` 결과를 `persisted_metric`에 기록한다. 한 요청이라도 응답이 없거나 시간 초과면 늦은 커밋 가능성 때문에 DB 집계를 쓰지 않고 그 회차를 실행 오류(`load_no_response`)로 남긴다.
+
+실행 오류가 나면 그때까지 완료된 회차의 관측 행을 보존하고 `observations.json`을 `execution_error`로 끝낸다.
+
+## 도구 호출 오류
+
+`probe_mapping`, `run_checks`는 호출할 수 없는 상황에서 `evaluator.runners.compose_postgres_k6.ToolError`를 던진다. `code`는 `tool_error` 코드다.
+
+| 코드 | 상황 |
+| --- | --- |
+| `not_started` | `start()`가 성공하기 전에 호출 |
+| `unknown_mapping` | 이번 실행에서 확인되지 않은 `mapping_id`로 `run_checks` 호출 |
+| `invalid_arguments` | `documented_operations`가 객체가 아님 |
+| `execution_error` | 매핑 시험용 이벤트를 넣지 못함 |
+
+후보가 실행할 수 없는 형태(동작 누락, 절대 URL, 선언되지 않은 변수 등)이면 예외 대신 `failed_stage: candidate_schema`인 시험 결과를 돌려주고 시험 횟수에 포함한다.
+
+## 테스트
+
+```powershell
+python -m pytest
+```
+
+Docker 없이 도는 단위 테스트가 템플릿, 매핑 시험, k6 스크립트, 덮어쓰기 파일을 검사한다. 실제 Docker로 끝까지 확인하려면 다음을 실행한다. `tests/runner_app`의 검증용 앱(정상·정원 초과·환경 변수 오구현 모드)을 빌드해 기동, 매핑 시험, 검사 3회, 정리까지 확인한다.
+
+```powershell
+$env:RACCOON_DOCKER_TESTS = "1"; python -m pytest tests/test_runner_docker.py
+```
