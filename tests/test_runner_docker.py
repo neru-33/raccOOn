@@ -9,12 +9,14 @@ import json
 import os
 import shutil
 import uuid
+from copy import deepcopy
 from pathlib import Path
-from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
 from evaluator import cli, contracts
+from evaluator.models import ModelClient, ModelTurn, ToolCall
 from evaluator.runners import compose as dc
 from evaluator.runners import open_session
 
@@ -81,30 +83,32 @@ def _project_exists(name: str) -> bool:
 
 
 @pytest.mark.parametrize(("mode", "expected_score"), [("correct", 40), ("oversell", 16)])
-def test_cli_grades_and_cleans_up_real_runner(tmp_path, monkeypatch, mode, expected_score):
+def test_cli_grades_and_cleans_up_through_agent(tmp_path, monkeypatch, mode, expected_score):
     submission = _submission(tmp_path, {"APP_MODE": mode})
     output = tmp_path / "output"
-    model_info = {"client": "test", "endpoint_host": None, "model": "scripted"}
-
-    def orchestrate(task, snapshot, session, model):
-        assert snapshot != submission
-        started = session.start()
-        assert started["status"] == "ready", started
-        probe = session.probe_mapping(GOOD)
-        assert probe["status"] == "verified", probe
-        observations = session.run_checks(probe["mapping_id"])
-        assert observations["status"] == "complete", observations
-        return {
-            "mapping_status": "verified",
-            "mapping_artifact": session.mapping_artifact(),
-            "probe_attempts": probe["probe_attempts"],
-            "observations": observations,
-            "model_info": model_info,
-            "error": None,
+    model = Mock(spec=ModelClient)
+    model.model_info = {"client": "test", "endpoint_host": None, "model": "scripted"}
+    turns = [ModelTurn([ToolCall("start", "start_submission", {})])]
+    if mode == "oversell":
+        (submission / "README.md").write_text("Create a reservation with POST /reserve\n", encoding="utf-8")
+        incorrect = deepcopy(GOOD)
+        incorrect["create_reservation"].update(
+            path_template="/reserve", source_ref={"path": "README.md", "start_line": 1, "end_line": 1},
+        )
+        documented = {
+            "create_reservation": {key: incorrect["create_reservation"][key]
+                                   for key in ("protocol", "method", "path_template", "source_ref")},
         }
-
-    monkeypatch.setattr(cli.models, "load_client", lambda env: SimpleNamespace(model_info=model_info))
-    monkeypatch.setattr(cli.agent, "orchestrate", orchestrate)
+        turns.append(ModelTurn([ToolCall("first-probe", "probe_mapping", {
+            "candidate": incorrect, "documented_operations": documented,
+        })]))
+    turns.extend([
+        ModelTurn([ToolCall("verified-probe", "probe_mapping", {"candidate": GOOD})]),
+        # The agent must still run checks when the model stops after verification.
+        ModelTurn(content="The mapping is verified."),
+    ])
+    model.complete.side_effect = turns
+    monkeypatch.setattr(cli.models, "load_client", lambda env: model)
 
     code = cli.main([
         "run", "--task", str(TASK_DIR / "task.json"),
@@ -117,12 +121,24 @@ def test_cli_grades_and_cleans_up_real_runner(tmp_path, monkeypatch, mode, expec
     contracts.validate("report.schema.json", report)
     assert report["base_score"] == expected_score
     assert report["review_status"] == "off"
+    assert report["model_info"] == model.model_info
+    assert model.complete.call_count == len(turns)
     assert (output / "report.md").is_file()
     for filename, schema in (("mapping.json", "mapping.schema.json"), ("observations.json", "observations.schema.json")):
         artifact = json.loads((output / filename).read_text(encoding="utf-8"))
         contracts.validate(schema, artifact)
         for key in ("schema_version", "run_id", "task_id", "submission_sha256", "mapping_id"):
             assert artifact[key] == report[key]
+
+    mapping = json.loads((output / "mapping.json").read_text(encoding="utf-8"))
+    history = mapping["probe_history"]
+    assert history[-1]["result"] == "verified"
+    if mode == "oversell":
+        assert report["probe_attempts"] == 2
+        assert history[0]["http_status"] == 404
+        assert mapping["documented_operations"]["create_reservation"]["probe_status"] == "failed"
+    else:
+        assert report["probe_attempts"] == 1
 
 
 @pytest.mark.parametrize(
