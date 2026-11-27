@@ -2,11 +2,15 @@
 
 import io
 import json
+from copy import deepcopy
 
 import pytest
 
 from evaluator import cli, contracts
-from evaluator.models import ModelTurn
+from evaluator.models import ModelTurn, ToolCall
+from evaluator.runners import compose_postgres_k6
+from evaluator.runners.build import AppBuild
+from evaluator.runners.probe import SequenceResult
 
 EXAMPLES = contracts.CONTRACTS_DIR / "examples" / "reservation"
 
@@ -50,7 +54,7 @@ class _Model:
 def _install_session(monkeypatch, variant):
     sessions = []
 
-    def open_session(task, task_dir, snapshot, meta):
+    def open_session(task, task_dir, snapshot, meta, *, on_check_progress=None):
         assert task_dir == EXAMPLES
         assert (snapshot / "README.md").is_file()
         session = _Session(snapshot, meta, variant)
@@ -91,7 +95,7 @@ def test_live_cli_reproduces_reservation_reports(variant, display, tmp_path, mon
         monkeypatch.setenv("CI", "true")
     args, output = _invocation(tmp_path, mode="live")
     sessions = _install_session(monkeypatch, variant)
-    monkeypatch.setattr(cli.agent, "orchestrate", lambda task, snapshot, session, model: session.result)
+    monkeypatch.setattr(cli.agent, "orchestrate", lambda *args: sessions[0].result)
     review_artifact = None
     if (EXAMPLES / f"ai-review.{variant}.json").is_file():
         review_artifact = _example(f"ai-review.{variant}")
@@ -127,7 +131,7 @@ def test_live_cli_reproduces_reservation_reports(variant, display, tmp_path, mon
     if display == "interactive":
         assert "███" in screen
         assert "Prepare submission snapshot" in screen
-        assert "Discover API and run checks" in screen
+        assert "Initialize evaluation agent" in screen
         assert f"Report: {output / 'report.md'}" in screen
         if exit_code == cli.ExitCode.INCOMPLETE:
             assert "Evaluation incomplete" in screen
@@ -186,8 +190,8 @@ def test_agent_failure_closes_runner_and_preserves_probe_history(tmp_path, monke
 def test_review_failure_preserves_functional_score(tmp_path, monkeypatch):
     terminal = _interactive_terminal(monkeypatch)
     args, output = _invocation(tmp_path, mode="live")
-    _install_session(monkeypatch, "correct")
-    monkeypatch.setattr(cli.agent, "orchestrate", lambda task, snapshot, session, model: session.result)
+    sessions = _install_session(monkeypatch, "correct")
+    monkeypatch.setattr(cli.agent, "orchestrate", lambda *args: sessions[0].result)
 
     def fail(*args, **kwargs):
         raise RuntimeError("review failed")
@@ -333,6 +337,7 @@ def test_invalid_task_fails_before_output_creation(tmp_path):
 
 
 def test_runner_without_operations_uses_null_mapping_without_loading_model(tmp_path, monkeypatch):
+    terminal = _interactive_terminal(monkeypatch)
     task_path = tmp_path / "task.json"
     task = _example("task")
     task["operations"] = {}
@@ -355,13 +360,78 @@ def test_runner_without_operations_uses_null_mapping_without_loading_model(tmp_p
         def close(self):
             calls.append("close")
 
-    monkeypatch.setattr(cli.runners, "open_session", lambda task, folder, snapshot, meta: Session(meta))
+    monkeypatch.setattr(cli.runners, "open_session", lambda task, folder, snapshot, meta, **kwargs: Session(meta))
     monkeypatch.setattr(cli.models, "load_client", lambda env: calls.append("model"))
 
     assert cli.main(args) == cli.ExitCode.OK
     assert _report(output)["base_score"] == 40
     assert calls == ["start", ("check", None), "close"]
     assert not (output / "mapping.json").exists()
+    screen = terminal.getvalue()
+    assert "DONE  Prepare and start submission" in screen
+    assert "DONE  Run submission checks" in screen
+    assert "Verify API mapping" not in screen
+    assert "Wait for evaluation agent" not in screen
+
+
+def test_interactive_progress_follows_actual_agent_calls_and_declared_check_rounds(tmp_path, monkeypatch):
+    terminal = _interactive_terminal(monkeypatch)
+    task = _example("task")
+    task["task_id"] = "data-service"
+    test_ids = {"reservation.functional": "data.ingest", "reservation.concurrent": "data.query"}
+    task["metrics"] = {test_ids[key]: value for key, value in task["metrics"].items()}
+    task["metrics"]["data.query"]["rounds"] = [3, 7, 9]
+    scenarios = task["runner_config"]["scenarios"]
+    task["runner_config"]["scenarios"] = {test_ids[key]: value for key, value in scenarios.items()}
+    for rule in task["rules"]:
+        rule["test_id"] = test_ids[rule["test_id"]]
+    task_path = tmp_path / "task.json"
+    task_path.write_text(json.dumps(task), encoding="utf-8")
+    args, output = _invocation(tmp_path, task_path)
+
+    def start(runner):
+        runner._build = AppBuild("compose", runner.snapshot_dir / "compose.yaml", "app")
+        runner._base_url = "http://127.0.0.1:1"
+
+    runner_type = compose_postgres_k6.ComposePostgresK6Runner
+    monkeypatch.setattr(runner_type, "_start", start)
+    monkeypatch.setattr(runner_type, "_discover", lambda self: [])
+    outcomes = iter([SequenceResult(False, failed_stage="status_code", http_status=404), SequenceResult(True)])
+    monkeypatch.setattr(compose_postgres_k6, "run_sequence", lambda *args, **kwargs: next(outcomes))
+    monkeypatch.setattr(runner_type, "_check_count_meaning", lambda *args: None)
+    monkeypatch.setattr(runner_type, "_sequence_round", lambda *args: {"created": True, "retrieved": True})
+    monkeypatch.setattr(runner_type, "_burst_round", lambda *args: {"confirmed_responses": 1, "persisted_confirmed": 1})
+
+    candidate = _example("mapping.correct")["operations"]
+    rejected = deepcopy(candidate)
+    rejected["create_reservation"]["body_template"] = {"event": "{unknown_variable}"}
+    turns = iter([
+        ModelTurn([ToolCall("start", "start_submission", {})]),
+        ModelTurn([ToolCall("invalid", "probe_mapping", {"candidate": rejected})]),
+        ModelTurn([ToolCall("first", "probe_mapping", {"candidate": candidate})]),
+        ModelTurn([ToolCall("second", "probe_mapping", {"candidate": candidate})]),
+        ModelTurn([ToolCall("checks", "run_checks", {"mapping_id": "map-1"})]),
+    ])
+
+    class Model(_Model):
+        def complete(self, messages, tools, response_schema):
+            return next(turns)
+
+    monkeypatch.setattr(cli.models, "load_client", lambda env: Model())
+
+    assert cli.main(args) == cli.ExitCode.OK
+    report = _report(output)
+    assert report["base_score"] == 40
+    assert report["probe_attempts"] == 2
+    screen = terminal.getvalue()
+    stages = [
+        "Wait for evaluation agent", "DONE  Prepare and start submission",
+        "FAIL  Verify API mapping (attempt 1)", "DONE  Verify API mapping (attempt 2)",
+        "data.ingest, round 1/1", "data.query, round 2/3 (ID 7)", "DONE  Run submission checks",
+    ]
+    positions = [screen.index(stage) for stage in stages]
+    assert positions == sorted(positions)
+    assert "(attempt 3)" not in screen
 
 
 def test_model_config_uses_dotenv_and_prefers_process_environment(tmp_path, monkeypatch):

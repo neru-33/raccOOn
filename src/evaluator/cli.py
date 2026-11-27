@@ -18,7 +18,7 @@ from jsonschema import ValidationError
 
 from evaluator import agent, contracts, core, models, reporting, review, runners, snapshot
 from evaluator.runners.compose_postgres_k6 import RunnerConfigError
-from evaluator.terminal import TerminalDisplay
+from evaluator.terminal import TerminalAgentModel, TerminalDisplay, TerminalRunner
 
 
 class ExitCode(IntEnum):
@@ -213,27 +213,28 @@ def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_
     else:
         with display.stage("Configure runner"):
             try:
-                session = runners.open_session(task, args.task.resolve().parent, snapshot_dir, run_meta)
+                session = runners.open_session(
+                    task, args.task.resolve().parent, snapshot_dir, run_meta,
+                    on_check_progress=display.check_progress if display.enabled else None,
+                )
             except (TypeError, KeyError, FileNotFoundError) as exc:
                 raise RunnerConfigError("Invalid runner configuration or missing fixture") from exc
         try:
-            label = "Discover API and run checks" if task["operations"] else "Run submission checks"
-            with display.stage(label) as stage:
-                if task["operations"]:
-                    try:
+            if display.enabled:
+                session = TerminalRunner(session, display)
+            if task["operations"]:
+                try:
+                    with display.stage("Initialize evaluation agent"):
                         model = _load_model()
-                    except Exception:
-                        result = _result("agent_unavailable", error=_error(
-                            "agent_unavailable", "model", "Could not initialize the evaluation model",
-                        ))
-                    else:
-                        result = _run_agent(task, snapshot_dir, session, model)
+                except Exception:
+                    result = _result("agent_unavailable", error=_error(
+                        "agent_unavailable", "model", "Could not initialize the evaluation model",
+                    ))
                 else:
-                    result = _run_unmapped(session)
-                observed = result.get("observations") if isinstance(result, dict) else None
-                if (not isinstance(result, dict) or result.get("error") is not None
-                        or isinstance(observed, dict) and observed.get("status") == "execution_error"):
-                    stage.status = "FAIL"
+                    agent_model = TerminalAgentModel(model, display) if display.enabled else model
+                    result = _run_agent(task, snapshot_dir, session, agent_model)
+            else:
+                result = _run_unmapped(session)
         finally:
             with display.stage("Clean up runner") as stage:
                 try:

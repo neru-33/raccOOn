@@ -7,8 +7,20 @@ is not part of the runner; see ``evaluator.snapshot.read_source``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+
+
+@dataclass(frozen=True)
+class CheckProgress:
+    """An in-process notification emitted before executing a declared round."""
+
+    test_id: str
+    round_id: int
+    position: int
+    total: int
 
 
 class RunnerSession(Protocol):
@@ -59,6 +71,8 @@ def open_session(
     task_dir: Path,
     snapshot_dir: Path,
     run_meta: dict[str, Any],
+    *,
+    on_check_progress: Callable[[CheckProgress], None] | None = None,
 ) -> RunnerSession:
     """Create the runner registered for ``task['runner_id']``.
 
@@ -66,6 +80,8 @@ def open_session(
     unusable ``runner_config``. Tool methods raise ``ToolError`` with a
     ``tool_error`` code (``not_started``, ``unknown_mapping``, ...) that the
     host turns into the tool result.
+
+    ``on_check_progress`` can observe rounds as they start for display.
     """
     from evaluator.runners.compose_postgres_k6 import RUNNER_ID, ComposePostgresK6Runner, RunnerConfigError
 
@@ -73,4 +89,4 @@ def open_session(
     runner_id = task.get("runner_id")
     if runner_id not in runners:
         raise RunnerConfigError(f"unknown runner_id {runner_id!r}; registered: {sorted(runners)}")
-    return runners[runner_id](task, task_dir, snapshot_dir, run_meta)
+    return runners[runner_id](task, task_dir, snapshot_dir, run_meta, on_check_progress=on_check_progress)
