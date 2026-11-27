@@ -61,6 +61,7 @@ class OpenAICompatibleClient:
         model: str,
         base_url: str = _DEFAULT_BASE_URL,
         response_format: _ResponseFormat = "json_schema",
+        reasoning_effort: Literal["none"] | None = None,
     ) -> None:
         try:
             url = urlsplit(base_url)
@@ -86,6 +87,7 @@ class OpenAICompatibleClient:
         self._model = model
         self._host = host
         self._response_format = response_format
+        self._reasoning_effort = reasoning_effort
         self._supports_parallel_option = True
 
     @property
@@ -103,6 +105,8 @@ class OpenAICompatibleClient:
         response_schema: dict[str, Any] | None,
     ) -> ModelTurn:
         request: dict[str, Any] = {"model": self._model, "messages": messages}
+        if self._reasoning_effort is not None:
+            request["reasoning_effort"] = self._reasoning_effort
         if tools:
             request["tools"] = tools
             if self._supports_parallel_option:
@@ -202,9 +206,13 @@ def load_client(env: Mapping[str, str]) -> ModelClient:
     response_format = env.get("EVALUATOR_RESPONSE_FORMAT", "").strip() or "json_schema"
     if response_format not in {"json_schema", "none"}:
         raise ValueError("EVALUATOR_RESPONSE_FORMAT must be json_schema or none")
+    reasoning_effort = env.get("EVALUATOR_REASONING_EFFORT", "").strip()
+    if reasoning_effort not in {"", "none"}:
+        raise ValueError("EVALUATOR_REASONING_EFFORT must be empty or none")
     return OpenAICompatibleClient(
         api_key=api_key,
         model=model,
         base_url=env.get("EVALUATOR_BASE_URL", "").strip() or _DEFAULT_BASE_URL,
         response_format=cast(_ResponseFormat, response_format),
+        reasoning_effort="none" if reasoning_effort else None,
     )
