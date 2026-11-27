@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import stat
 from collections.abc import Callable
 from functools import cache
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
+
+from evaluator.snapshot import source_line_count
 
 from ._scoring import Rows, _METRIC_NAME, _TEST_ID, verifies_feature
 
@@ -68,42 +68,6 @@ def _valid_review(artifact: dict) -> bool:
         and all(_valid_finding(finding) for finding in artifact["quality_findings"])
         and all(_valid_hypothesis(hypothesis) for hypothesis in artifact["hypotheses"])
     )
-
-
-def _line_count(snapshot: Path, relative_path: str) -> int | None:
-    parts = PurePosixPath(relative_path).parts
-    if not parts or any(
-        part.lower() in {".git", ".env"} or part.lower().startswith(".env.")
-        or ":" in part or (os.name == "nt" and _windows_reserved(part))
-        for part in parts
-    ):
-        return None
-
-    path = snapshot
-    try:
-        for part in parts:
-            path = path / part
-            info = path.lstat()
-            if stat.S_ISLNK(info.st_mode) or (
-                getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
-            ):
-                return None
-        if not stat.S_ISREG(info.st_mode):
-            return None
-        # Windows can open a file through an alias (e.g. an 8.3 name).
-        actual_parts = path.resolve(strict=True).relative_to(snapshot.resolve(strict=True)).parts
-        if any(part.lower() in {".git", ".env"} or part.lower().startswith(".env.") for part in actual_parts):
-            return None
-        with path.open(encoding="utf-8") as source:
-            return sum(1 for _ in source)
-    except (OSError, ValueError):
-        return None
-
-
-def _windows_reserved(part: str) -> bool:
-    if hasattr(os.path, "isreserved"):
-        return os.path.isreserved(part)
-    return part.endswith((".", " ")) or PureWindowsPath(part).is_reserved()
 
 
 def _source_issue(ref: dict, line_count: Callable[[str], int | None]) -> str | None:
@@ -177,7 +141,7 @@ def review_report(task: dict, artifact: dict, rows: Rows, snapshot: Path) -> tup
 
     @cache
     def line_count(path: str) -> int | None:
-        return _line_count(snapshot, path)
+        return source_line_count(snapshot, path)
 
     quality = [_grade_finding(criterion, findings.get(criterion["id"], {}), rows, line_count) for criterion in criteria]
     hypotheses = []
