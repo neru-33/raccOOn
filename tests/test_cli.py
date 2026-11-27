@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from evaluator import cli, contracts
 
 EXAMPLES = contracts.CONTRACTS_DIR / "examples" / "reservation"
@@ -65,29 +67,52 @@ def _report(output):
     return report
 
 
-def test_live_cli_writes_artifacts_with_a_shared_run_id(tmp_path, monkeypatch):
+@pytest.mark.parametrize("variant", ["correct", "oversell", "evidence-gap", "unresolved", "start-failed"])
+def test_live_cli_reproduces_reservation_reports(variant, tmp_path, monkeypatch):
     args, output = _invocation(tmp_path, mode="live")
-    sessions = _install_session(monkeypatch, "correct")
+    sessions = _install_session(monkeypatch, variant)
     monkeypatch.setattr(cli.agent, "orchestrate", lambda task, snapshot, session, model: session.result)
+    review_artifact = None
+    if (EXAMPLES / f"ai-review.{variant}.json").is_file():
+        review_artifact = _example(f"ai-review.{variant}")
+        refs = [ref for finding in review_artifact["quality_findings"] for ref in finding["source_refs"]]
+        refs.extend(hypothesis["source_ref"] for hypothesis in review_artifact["hypotheses"])
+        line_counts = {}
+        for ref in refs:
+            path = ref["path"]
+            line_counts[path] = max(line_counts.get(path, 0), ref["end_line"])
+        if variant == "evidence-gap":
+            line_counts["tests/test_capacity.py"] = 40
+        for relative, count in line_counts.items():
+            path = tmp_path / "submission" / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("\n" * count, encoding="utf-8")
 
     def review(task, snapshot, observations, mapping, mode, model):
         assert sessions[0].closed
         assert observations["run_id"] == mapping["run_id"]
         assert isinstance(model, _Model)
-        artifact = _example("ai-review.correct")
-        artifact.update(sessions[0].meta)
-        artifact.update(quality_findings=[], hypotheses=[])
+        artifact = {**review_artifact, **sessions[0].meta}
         return {"status": "ok", "review_artifact": artifact, "error": None}
 
     monkeypatch.setattr(cli.review, "review", review)
 
-    assert cli.main(args) == cli.ExitCode.OK
-    report = _report(output)
-    assert report["base_score"] == 40
-    assert report["review_status"] == "ok"
-    for name in ("mapping.json", "observations.json", "ai_review.json"):
-        artifact = json.loads((output / name).read_text(encoding="utf-8"))
-        assert {key: artifact[key] for key in sessions[0].meta} == sessions[0].meta
+    expected = _example(f"report.{variant}")
+    exit_code = cli.ExitCode.OK if expected["run_status"] == "graded" else cli.ExitCode.INCOMPLETE
+    assert cli.main(args) == exit_code
+    assert _report(output) == {**expected, **sessions[0].meta}
+    artifacts = {
+        "mapping.json": sessions[0].result["mapping_artifact"],
+        "observations.json": sessions[0].result["observations"],
+        "ai_review.json": review_artifact,
+    }
+    for name, expected_artifact in artifacts.items():
+        path = output / name
+        if expected_artifact is None:
+            assert not path.exists()
+        else:
+            assert json.loads(path.read_text(encoding="utf-8")) == {**expected_artifact, **sessions[0].meta}
+    assert sessions[0].closed
     assert not sessions[0].snapshot.exists()
 
 
@@ -129,6 +154,59 @@ def test_review_failure_preserves_functional_score(tmp_path, monkeypatch):
     report = _report(output)
     assert report["base_score"] == 40
     assert report["review_status"] == "unavailable"
+    assert not (output / "ai_review.json").exists()
+
+
+@pytest.mark.parametrize("problem", ["wrong-run", "wrong-mapping", "malformed", "non-finite"])
+def test_cli_keeps_mapping_when_observations_are_invalid(problem, tmp_path, monkeypatch):
+    args, output = _invocation(tmp_path)
+    sessions = _install_session(monkeypatch, "correct")
+
+    def orchestrate(task, snapshot, session, model):
+        observations = session.result["observations"]
+        if problem == "wrong-run":
+            observations["run_id"] = "another-run"
+        elif problem == "wrong-mapping":
+            observations["mapping_id"] = "another-mapping"
+        elif problem == "malformed":
+            del observations["observations"]
+        else:
+            observations["observations"][1]["metrics"]["persisted_confirmed"] = float("inf")
+        return session.result
+
+    monkeypatch.setattr(cli.agent, "orchestrate", orchestrate)
+
+    assert cli.main(args) == cli.ExitCode.INCOMPLETE
+    report = _report(output)
+    assert report["mapping_status"] == "verified"
+    assert report["base_score"] is None
+    assert report["errors"][0]["code"] == "invalid_observations"
+    assert (output / "mapping.json").is_file()
+    assert not (output / "observations.json").exists()
+    assert sessions[0].closed
+
+
+def test_malformed_orchestration_still_produces_an_incomplete_report(tmp_path, monkeypatch):
+    args, output = _invocation(tmp_path)
+    sessions = _install_session(monkeypatch, "correct")
+    monkeypatch.setattr(cli.agent, "orchestrate", lambda *args: {})
+
+    assert cli.main(args) == cli.ExitCode.INCOMPLETE
+    report = _report(output)
+    assert report["errors"][0]["stage"] == "orchestration"
+    assert sessions[0].closed
+
+
+def test_malformed_review_is_reported_without_losing_functional_score(tmp_path, monkeypatch):
+    args, output = _invocation(tmp_path, mode="live")
+    _install_session(monkeypatch, "correct")
+    monkeypatch.setattr(cli.agent, "orchestrate", lambda task, snapshot, session, model: session.result)
+    monkeypatch.setattr(cli.review, "review", lambda *args: {"status": "ok"})
+
+    assert cli.main(args) == cli.ExitCode.OK
+    report = _report(output)
+    assert report["base_score"] == 40
+    assert report["review_status"] == "invalid_output"
     assert not (output / "ai_review.json").exists()
 
 

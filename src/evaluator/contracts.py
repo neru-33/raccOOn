@@ -63,7 +63,11 @@ def _registry() -> Registry:
 
 def validate(name: str, instance: Any) -> None:
     """Validate against the full contract, resolving references locally."""
-    Draft202012Validator(_load(name), registry=_registry()).validate(instance)
+    filename, _, fragment = name.partition("#")
+    schema = _load(filename)
+    if fragment:
+        schema = {"$ref": f"{schema['$id']}#{fragment}"}
+    Draft202012Validator(schema, registry=_registry()).validate(instance)
 
 
 def _resolve_pointer(doc: dict[str, Any], fragment: str) -> Any:
