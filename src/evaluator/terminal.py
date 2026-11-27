@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 from time import monotonic
-from typing import TextIO
+from typing import Literal, TextIO
 
 from rich.cells import cell_len
 from rich.console import Console
@@ -18,7 +18,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 @dataclass
 class Stage:
-    failed: bool = False
+    status: Literal["DONE", "FAIL", "SKIP"] = "DONE"
 
 
 class TerminalDisplay:
@@ -73,31 +73,47 @@ class TerminalDisplay:
                 progress.start()
             yield state
         except BaseException:
-            state.failed = True
+            state.status = "FAIL"
             raise
         finally:
             with suppress(OSError, UnicodeError):
                 progress.stop()
-            status = "FAIL" if state.failed else "DONE"
-            self._print(f"{status:4}  {label}  ({monotonic() - start:.1f}s)",
-                        style="red" if state.failed else "green")
+            style = {"DONE": "green", "FAIL": "red", "SKIP": "yellow"}[state.status]
+            self._print(f"{state.status:4}  {label}  ({monotonic() - start:.1f}s)", style=style)
 
-    def summary(self, report: dict, output: Path) -> None:
+    def summary(self, report: dict, output: Path, *, review_enabled: bool) -> None:
         if self._console is None:
             return
-        graded = report["run_status"] == "graded"
+
+        review_status = report["review_status"]
+        if report["run_status"] == "incomplete":
+            heading = "Evaluation incomplete"
+        elif review_status in {"invalid_output", "unavailable"}:
+            heading = "Functional scoring complete - Quality review failed"
+        elif not review_enabled:
+            heading = "Functional scoring complete"
+        elif report["quality_score"] is None:
+            heading = "Functional scoring complete - Quality score unavailable"
+        else:
+            heading = "Evaluation complete"
+
         self._print("")
-        self._print("Evaluation complete" if graded else "Evaluation incomplete",
-                    style="bold green" if graded else "bold yellow")
+        self._print(heading, style="bold green" if report["total_score"] is not None else "bold yellow")
+        quality_without_score = "Unavailable"
+        if not review_enabled:
+            quality_without_score = "Disabled"
+        elif review_status == "skipped":
+            quality_without_score = "Skipped"
         scores = []
-        for label, key, limit in (("Functional", "base_score", "max_score"),
-                                  ("Quality", "quality_score", "quality_max_score"),
-                                  ("Total", "total_score", "total_max_score")):
+        for label, key, limit, missing in (("Functional", "base_score", "max_score", "Unavailable"),
+                                           ("Quality", "quality_score", "quality_max_score", quality_without_score),
+                                           ("Total", "total_score", "total_max_score", "Unavailable")):
             value = report[key]
-            scores.append(f"{label}: {value}/{report[limit]}" if value is not None else f"{label}: pending")
+            score = f"{value}/{report[limit]}" if value is not None else missing
+            scores.append(f"{label}: {score}")
         self._print("  |  ".join(scores))
-        if report["review_status"] != "ok":
-            self._print(f"Review: {report['review_status']}", style="dim")
         for error in report["errors"]:
-            self._print(f"{error['stage']}: {error['code']}", style="yellow")
+            message = " ".join(error["message"].split())
+            message = "".join(character for character in message if character.isprintable())
+            self._print(f"{error['stage']}: {error['code']} - {message}", style="yellow", soft_wrap=True)
         self._print(f"Report: {output / 'report.md'}", soft_wrap=True)

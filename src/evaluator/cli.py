@@ -231,25 +231,29 @@ def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_
                 else:
                     result = _run_unmapped(session)
                 observed = result.get("observations") if isinstance(result, dict) else None
-                stage.failed = (not isinstance(result, dict) or result.get("error") is not None
-                                or isinstance(observed, dict) and observed.get("status") == "execution_error")
+                if (not isinstance(result, dict) or result.get("error") is not None
+                        or isinstance(observed, dict) and observed.get("status") == "execution_error"):
+                    stage.status = "FAIL"
         finally:
             with display.stage("Clean up runner") as stage:
                 try:
                     session.close()
                 except Exception:
-                    stage.failed = True
+                    stage.status = "FAIL"
                     cleanup_error = _error("execution_error", "cleanup", "Runner could not clean up its resources")
 
     review_result = {"status": "off", "review_artifact": None, "error": None}
-    with display.stage("Score functional results"):
+    with display.stage("Score functional results") as stage:
         result = _validate_orchestration(result, run_meta)
         report = core.evaluate(task, run_meta, result, review_result, snapshot_dir)
+        if report["base_score"] is None:
+            stage.status = "SKIP"
     if report["run_status"] == "graded" and args.review == "live":
         with display.stage("Review submission quality") as stage:
             review_result = _run_review(task, snapshot_dir, result, model, run_meta)
             report = core.evaluate(task, run_meta, result, review_result, snapshot_dir)
-            stage.failed = report["review_status"] != "ok"
+            if report["review_status"] != "ok":
+                stage.status = "FAIL"
     if cleanup_error is not None:
         report["errors"].append(cleanup_error)
 
@@ -261,7 +265,7 @@ def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_
         if report["review_status"] == "ok":
             _write_json(args.out / "ai_review.json", review_result["review_artifact"])
         _write_report(report, args.out)
-    display.summary(report, args.out)
+    display.summary(report, args.out, review_enabled=args.review == "live")
     return ExitCode.OK if report["run_status"] == "graded" else ExitCode.INCOMPLETE
 
 

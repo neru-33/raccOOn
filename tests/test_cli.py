@@ -74,15 +74,19 @@ class _Terminal(io.StringIO):
         return True
 
 
+def _interactive_terminal(monkeypatch, columns="100"):
+    terminal = _Terminal()
+    monkeypatch.setattr(cli.sys, "stderr", terminal)
+    monkeypatch.setenv("TERM", "xterm")
+    monkeypatch.setenv("COLUMNS", columns)
+    monkeypatch.delenv("CI", raising=False)
+    return terminal
+
+
 @pytest.mark.parametrize("variant", ["correct", "oversell", "evidence-gap", "unresolved", "start-failed"])
 @pytest.mark.parametrize("display", ["redirected", "interactive", "ci"])
 def test_live_cli_reproduces_reservation_reports(variant, display, tmp_path, monkeypatch, capsys):
-    terminal = _Terminal()
-    if display != "redirected":
-        monkeypatch.setattr(cli.sys, "stderr", terminal)
-    monkeypatch.setenv("TERM", "xterm")
-    monkeypatch.setenv("COLUMNS", "100")
-    monkeypatch.delenv("CI", raising=False)
+    terminal = _interactive_terminal(monkeypatch) if display != "redirected" else _Terminal()
     if display == "ci":
         monkeypatch.setenv("CI", "true")
     args, output = _invocation(tmp_path, mode="live")
@@ -125,7 +129,18 @@ def test_live_cli_reproduces_reservation_reports(variant, display, tmp_path, mon
         assert "Prepare submission snapshot" in screen
         assert "Discover API and run checks" in screen
         assert f"Report: {output / 'report.md'}" in screen
-        assert ("Evaluation complete" if exit_code == cli.ExitCode.OK else "Evaluation incomplete") in screen
+        if exit_code == cli.ExitCode.INCOMPLETE:
+            assert "Evaluation incomplete" in screen
+            assert "SKIP  Score functional results" in screen
+            assert "DONE  Score functional results" not in screen
+        elif variant == "evidence-gap":
+            assert "Functional scoring complete - Quality score unavailable" in screen
+            assert "Evaluation complete" not in screen
+        else:
+            assert "Evaluation complete" in screen
+        if variant == "start-failed":
+            assert "readiness: submission_start_failed - GET /health did not return 200 within 60s" in screen
+            assert "Quality: Skipped" in screen
     else:
         assert screen == ""
     assert _report(output) == {**expected, **sessions[0].meta}
@@ -169,6 +184,7 @@ def test_agent_failure_closes_runner_and_preserves_probe_history(tmp_path, monke
 
 
 def test_review_failure_preserves_functional_score(tmp_path, monkeypatch):
+    terminal = _interactive_terminal(monkeypatch)
     args, output = _invocation(tmp_path, mode="live")
     _install_session(monkeypatch, "correct")
     monkeypatch.setattr(cli.agent, "orchestrate", lambda task, snapshot, session, model: session.result)
@@ -183,6 +199,11 @@ def test_review_failure_preserves_functional_score(tmp_path, monkeypatch):
     assert report["base_score"] == 40
     assert report["review_status"] == "unavailable"
     assert not (output / "ai_review.json").exists()
+    screen = terminal.getvalue()
+    assert "FAIL  Review submission quality" in screen
+    assert "Functional scoring complete - Quality review failed" in screen
+    assert "Evaluation complete" not in screen
+    assert "Functional: 40/40  |  Quality: Unavailable  |  Total: Unavailable" in screen
 
 
 @pytest.mark.parametrize("problem", ["wrong-run", "wrong-mapping", "malformed", "non-finite"])
@@ -239,11 +260,7 @@ def test_malformed_review_is_reported_without_losing_functional_score(tmp_path, 
 
 
 def test_review_off_without_runner_needs_no_model(tmp_path, monkeypatch):
-    terminal = _Terminal()
-    monkeypatch.setattr(cli.sys, "stderr", terminal)
-    monkeypatch.delenv("CI", raising=False)
-    monkeypatch.setenv("TERM", "xterm")
-    monkeypatch.setenv("COLUMNS", "40")
+    terminal = _interactive_terminal(monkeypatch, columns="40")
     task_path = tmp_path / "task.json"
     task = _example("task")
     task.update(task_id="quality-only", runner_id=None, runner_config={}, operations={}, metrics={}, rules=[])
@@ -267,6 +284,9 @@ def test_review_off_without_runner_needs_no_model(tmp_path, monkeypatch):
     assert "quality-only" in screen
     assert "Configure runner" not in screen
     assert "Review submission quality" not in screen
+    assert "Functional scoring complete" in screen
+    assert "Quality: Disabled" in screen
+    assert "Total: Unavailable" in screen
 
 
 def test_live_review_without_runner_uses_cli_run_metadata(tmp_path, monkeypatch):
