@@ -18,11 +18,12 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from itertools import count
 from pathlib import Path
 from typing import Any
 
-from evaluator.runners import compose as dc
+from evaluator.runners import CheckProgress, compose as dc
 from evaluator.runners.build import AppBuild, BuildError, prepare_app
 from evaluator.runners.k6 import SummaryError, build_script, parse_summary
 from evaluator.runners.probe import ProbeLog, SequenceResult, UrllibTransport, run_sequence, validate_candidate
@@ -77,12 +78,21 @@ def _image_version(image: str) -> str | None:
 
 
 class ComposePostgresK6Runner:
-    def __init__(self, task: dict[str, Any], task_dir: Path, snapshot_dir: Path, run_meta: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        task: dict[str, Any],
+        task_dir: Path,
+        snapshot_dir: Path,
+        run_meta: dict[str, Any],
+        *,
+        on_check_progress: Callable[[CheckProgress], None] | None = None,
+    ) -> None:
         self.task = task
         self.task_dir = Path(task_dir)
         self.snapshot_dir = Path(snapshot_dir)
         self.run_meta = {k: run_meta[k] for k in ("schema_version", "run_id", "task_id", "submission_sha256")}
         self.config = task.get("runner_config") or {}
+        self._on_check_progress = on_check_progress
         self._validate_config()
 
         app = self.config["app"]
@@ -390,7 +400,10 @@ class ComposePostgresK6Runner:
         try:
             for test_id, decl in self.task["metrics"].items():
                 scenario = self.config["scenarios"][test_id]
-                for rnd in decl["rounds"]:
+                rounds = decl["rounds"]
+                for position, rnd in enumerate(rounds, start=1):
+                    if self._on_check_progress is not None:
+                        self._on_check_progress(CheckProgress(test_id, rnd, position, len(rounds)))
                     try:
                         if scenario["kind"] == "operation_sequence":
                             metrics = self._sequence_round(scenario, operations, calls)
