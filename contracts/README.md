@@ -24,6 +24,12 @@
 | `correct` | 첫 후보로 매핑 확인, 세 회차 모두 확정 1건 | 기능 40, 품질 48, 총점 88 |
 | `oversell` | README의 생성 경로가 404, OpenAPI 대안으로 확인. 2·3회차 확정 2건 | 기능 16, 품질 17, 총점 33 |
 | `unresolved` | 2회 시험 모두 실패 | `incomplete`, 점수 null |
+| `evidence-gap` | `correct`와 같은 실행 결과. 리뷰가 파일 줄 수를 넘는 범위를 인용 | 기능 40, 해당 품질 항목 보류, 품질·총점 null |
+| `start-failed` | 실행기 인프라는 정상, 앱이 헬스 경로에 응답하지 않음 | `incomplete`, `submission_start_failed`, 점수 null |
+
+`orchestration-result.<실행>.json`은 코어에 들어가는 `orchestration_result`이고, `ai-review.<실행>.json`과 함께 같은 실행의 `report.<실행>.json`을 재현하는 입력이다. 코드 위치 확인에는 스냅샷 파일이 필요하므로 코어 테스트는 인용된 경로와 줄 수를 갖춘 고정 스냅샷을 함께 둔다(`evidence-gap`에서는 `tests/test_capacity.py`가 40줄).
+
+`fixtures/schema.sql`은 예약 예제 앱 두 개가 공유하는 DB 스키마다. 실행기가 기동 전에 적용하고 회차마다 초기화·시드·확정 건수 조회에 쓴다(`runner_config.fixtures`). 예제 앱 실행을 위한 조건이며, 응시자가 설계할 저장 구조를 정하는 것은 아니다.
 
 ## 공통 봉투
 

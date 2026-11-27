@@ -25,6 +25,12 @@
         }
       ]
     },
+    "fixtures": {
+      "schema_sql": "fixtures/schema.sql",
+      "reset_sql": "TRUNCATE reservations, events",
+      "seed_event_sql": "INSERT INTO events (id, capacity) VALUES (%(event_id)s, %(capacity)s)",
+      "confirmed_count_sql": "SELECT count(*) FROM reservations WHERE event_id = %(event_id)s AND status = 'CONFIRMED'"
+    },
     "probe": {
       "event_capacity": 5
     },

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "run_id": "run-20261127T144500Z-5f6a7b",
+  "task_id": "reservation-v1",
+  "submission_sha256": "9a11235fbec6ac7c5fde371fbe727c5bda570b4c5e78cbfb4b547a37464e45b4",
+  "run_status": "incomplete",
+  "mapping_status": "not_reached",
+  "mapping_id": null,
+  "probe_attempts": 0,
+  "calls": null,
+  "base_score": null,
+  "max_score": 40,
+  "rule_results": [],
+  "quality_score": null,
+  "quality_max_score": 60,
+  "quality_results": [],
+  "total_score": null,
+  "total_max_score": 100,
+  "review_status": "skipped",
+  "review_result": {
+    "status": "skipped",
+    "review_artifact": null,
+    "error": null
+  },
+  "hypothesis_results": [],
+  "model_info": {
+    "client": "openai-compatible",
+    "endpoint_host": "api.openai.com",
+    "model": "example-model"
+  },
+  "errors": [
+    {
+      "code": "submission_start_failed",
+      "stage": "readiness",
+      "message": "GET /health did not return 200 within 60s; runner infrastructure checks passed",
+      "log_excerpt": "Traceback (most recent call last):\n  File \"/app/main.py\", line 9, in <module>\n    DB = os.environ[\"DB_URL\"]\nKeyError: 'DB_URL'"
+    }
+  ]
+}

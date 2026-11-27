@@ -19,6 +19,7 @@ SCHEMA_BY_PREFIX = {
     "observations": "observations.schema.json",
     "ai-review": "ai-review.schema.json",
     "report": "report.schema.json",
+    "orchestration-result": "runtime.schema.json#/$defs/orchestration_result",
 }
 
 
@@ -34,7 +35,11 @@ REGISTRY = _registry()
 
 
 def _validator(schema_name: str) -> Draft202012Validator:
-    return Draft202012Validator(contracts.load_schema(schema_name), registry=REGISTRY)
+    name, _, fragment = schema_name.partition("#")
+    schema = contracts.load_schema(name)
+    if fragment:
+        schema = {"$ref": f"{schema['$id']}#{fragment}"}
+    return Draft202012Validator(schema, registry=REGISTRY)
 
 
 def _load(path: Path) -> dict:
@@ -174,8 +179,15 @@ def test_envelopes_match_within_each_run() -> None:
         if variant is None:
             continue
         doc = _load(path)
-        key = (doc["schema_version"], doc["run_id"], doc["task_id"], doc["submission_sha256"])
-        by_variant.setdefault(variant, set()).add(key)
+        # orchestration_result has no envelope of its own; check the artifacts it carries.
+        docs = (
+            [d for d in (doc["mapping_artifact"], doc["observations"]) if d is not None]
+            if prefix == "orchestration-result"
+            else [doc]
+        )
+        for d in docs:
+            key = (d["schema_version"], d["run_id"], d["task_id"], d["submission_sha256"])
+            by_variant.setdefault(variant, set()).add(key)
     assert by_variant
     for variant, keys in by_variant.items():
         assert len(keys) == 1, f"{variant}: envelopes differ {keys}"
@@ -481,3 +493,51 @@ def test_submission_app_declares_health_path() -> None:
     app = _example("task.json")["runner_config"]["app"]
     assert app["health_path"].startswith("/")
     assert isinstance(app["ready_timeout_seconds"], int) and app["ready_timeout_seconds"] > 0
+
+
+ORCHESTRATED_RUNS = ["correct", "oversell", "unresolved", "start-failed", "evidence-gap"]
+
+
+@pytest.mark.parametrize("variant", ORCHESTRATED_RUNS)
+def test_orchestration_result_matches_artifacts_and_report(variant: str) -> None:
+    orch = _example(f"orchestration-result.{variant}.json")
+    report = _example(f"report.{variant}.json")
+    assert report["mapping_status"] == orch["mapping_status"]
+    assert report["probe_attempts"] == orch["probe_attempts"]
+    if orch["mapping_artifact"] is not None:
+        assert orch["mapping_artifact"] == _example(f"mapping.{variant}.json")
+        assert report["mapping_id"] == orch["mapping_artifact"]["mapping_id"]
+    if orch["observations"] is not None:
+        assert orch["observations"] == _example(f"observations.{variant}.json")
+    if orch["error"] is not None:
+        assert orch["error"] in report["errors"]
+        assert report["run_status"] == "incomplete"
+
+
+@pytest.mark.parametrize("variant", ["correct", "evidence-gap"])
+def test_review_findings_carry_into_report(variant: str) -> None:
+    review = _example(f"ai-review.{variant}.json")
+    report = _example(f"report.{variant}.json")
+    by_id = {q["criterion_id"]: q for q in report["quality_results"]}
+    for finding in review["quality_findings"]:
+        result = by_id[finding["criterion_id"]]
+        assert result["rating"] == finding["rating"]
+        assert result["source_refs"] == finding["source_refs"]
+        assert [e["ref"] for e in result["observation_evidence"]] == finding["observation_refs"]
+
+
+def test_evidence_gap_withholds_quality_and_total() -> None:
+    report = _example("report.evidence-gap.json")
+    withheld = [q for q in report["quality_results"] if q["status"] == "insufficient_evidence"]
+    assert withheld and all(q["points_awarded"] is None and q["issues"] for q in withheld)
+    assert report["base_score"] == 40
+    assert report["quality_score"] is None and report["total_score"] is None
+
+
+def test_example_fixtures_back_runner_queries() -> None:
+    fixtures = _example("task.json")["runner_config"]["fixtures"]
+    schema_sql = (EXAMPLES_DIR / fixtures["schema_sql"]).read_text(encoding="utf-8")
+    for table in ("events", "reservations"):
+        assert f"CREATE TABLE IF NOT EXISTS {table}" in schema_sql
+    assert "%(event_id)s" in fixtures["seed_event_sql"] and "%(capacity)s" in fixtures["seed_event_sql"]
+    assert "%(event_id)s" in fixtures["confirmed_count_sql"]
