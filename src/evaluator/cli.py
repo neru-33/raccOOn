@@ -104,6 +104,8 @@ def _run_agent(task: dict, snapshot_dir: Path, session: runners.RunnerSession,
     except Exception:
         try:
             mapping = session.mapping_artifact()
+            if mapping is not None:
+                contracts.validate("mapping.schema.json", mapping)
         except Exception:
             mapping = None
         status = "verified" if mapping and mapping["mapping_id"] else "agent_unavailable"
@@ -115,10 +117,66 @@ def _run_review(task: dict, snapshot_dir: Path, result: dict, model: models.Mode
     try:
         if model is None:
             model = _load_model()
-        return review.review(task, snapshot_dir, result["observations"], result["mapping_artifact"], "live", model)
+        response = review.review(task, snapshot_dir, result["observations"], result["mapping_artifact"], "live", model)
     except Exception:
         error = _error("review_unavailable", "review", "Quality review failed before returning its result")
         return {"status": "unavailable", "review_artifact": None, "error": error}
+    try:
+        contracts.validate("runtime.schema.json#/$defs/review_result", response)
+    except ValidationError:
+        error = _error("review_invalid_output", "review", "Quality review returned an invalid result")
+        return {"status": "invalid_output", "review_artifact": None, "error": error}
+    return response
+
+
+def _validate_artifact(artifact: dict, schema: str, run_meta: dict) -> None:
+    contracts.validate(schema, artifact)
+    if any(artifact[key] != value for key, value in run_meta.items()):
+        raise ValueError("Artifact belongs to a different run")
+    # JSON Schema validators also accept Python-only non-finite floats.
+    json.dumps(artifact, allow_nan=False)
+
+
+def _validate_orchestration(result: object, run_meta: dict) -> dict:
+    if isinstance(result, dict):
+        try:
+            # Check the envelope separately so one bad artifact does not discard the other.
+            summary = {key: None if key in {"mapping_artifact", "observations"} else value
+                       for key, value in result.items()}
+            contracts.validate("runtime.schema.json#/$defs/orchestration_result", summary)
+        except ValidationError:
+            pass
+        else:
+            return _validate_run_artifacts(result, run_meta)
+    return _result("not_reached", error=_error(
+        "execution_error", "orchestration", "Evaluation returned an invalid orchestration result",
+    ))
+
+
+def _validate_run_artifacts(result: dict, run_meta: dict) -> dict:
+    result = result.copy()
+    mapping = result["mapping_artifact"]
+    observations = result["observations"]
+    if mapping is not None:
+        try:
+            _validate_artifact(mapping, "mapping.schema.json", run_meta)
+        except (ValidationError, TypeError, ValueError):
+            result.update(mapping_artifact=None, mapping_status="not_reached", error=_error(
+                "contract_error", "mapping", "Mapping record is invalid or belongs to another run",
+            ))
+    if observations is not None:
+        try:
+            _validate_artifact(observations, "observations.schema.json", run_meta)
+            expected_id = result["mapping_artifact"]["mapping_id"] if result["mapping_artifact"] else None
+            if observations["mapping_id"] != expected_id:
+                raise ValueError("Observation mapping ID does not match")
+        except (ValidationError, TypeError, ValueError):
+            result["observations"] = None
+            if result["error"] is None:
+                result["error"] = _error(
+                    "invalid_observations", "run_checks", "Observation record is invalid or its metadata does not match",
+                )
+    return result
 
 
 def _write_json(path: Path, value: dict) -> None:
@@ -171,6 +229,7 @@ def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_
             except Exception:
                 cleanup_error = _error("execution_error", "cleanup", "Runner could not clean up its resources")
 
+    result = _validate_orchestration(result, run_meta)
     review_result = {"status": "off", "review_artifact": None, "error": None}
     report = core.evaluate(task, run_meta, result, review_result, snapshot_dir)
     if report["run_status"] == "graded" and args.review == "live":
@@ -181,7 +240,7 @@ def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_
 
     for field, name in (("mapping_artifact", "mapping.json"), ("observations", "observations.json")):
         artifact = result[field]
-        if artifact is not None and all(artifact.get(key) == value for key, value in run_meta.items()):
+        if artifact is not None:
             _write_json(args.out / name, artifact)
     if report["review_status"] == "ok":
         _write_json(args.out / "ai_review.json", review_result["review_artifact"])
