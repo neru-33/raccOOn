@@ -56,6 +56,10 @@ async def unavailable_problem(request: Request, exc: Exception) -> JSONResponse:
     return problems.response(problem, request.url.path)
 
 
+class EventRequest(BaseModel):
+    capacity: int = Field(ge=0, le=1_000_000)
+
+
 class BookingRequest(BaseModel):
     userId: str = Field(min_length=1, max_length=200)
 
@@ -64,6 +68,20 @@ class BookingRequest(BaseModel):
 def health(request: Request) -> dict:
     service.ping(request.app.state.pool)
     return {"status": "ok"}
+
+
+@app.post("/v1/events", status_code=201)
+def create_event(body: EventRequest, request: Request) -> JSONResponse:
+    event = service.create_event(request.app.state.pool, body.capacity)
+    return JSONResponse({"event": event}, status_code=201, headers={"Location": f"/v1/events/{event['eventId']}"})
+
+
+@app.get("/v1/events/{event_id}")
+def get_event(event_id: str, request: Request) -> dict:
+    event = service.get_event(request.app.state.pool, event_id)
+    if event is None:
+        raise Problem(404, "event-not-found", "Event not found", f"event {event_id} does not exist")
+    return {"event": event}
 
 
 @app.post("/v1/events/{event_id}/bookings", status_code=201)

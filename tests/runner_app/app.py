@@ -16,6 +16,23 @@ import psycopg
 DB_URL = os.environ[os.environ.get("APP_DB_ENV", "DATABASE_URL")]
 MODE = os.environ.get("APP_MODE", "correct")
 
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, capacity INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS reservations (
+    id TEXT PRIMARY KEY, event_id TEXT NOT NULL, user_id TEXT NOT NULL, status TEXT NOT NULL
+);
+"""
+
+
+def remaining(conn, event_id):
+    row = conn.execute("SELECT capacity FROM events WHERE id = %s", (event_id,)).fetchone()
+    if row is None:
+        return None, None
+    used = conn.execute(
+        "SELECT count(*) FROM reservations WHERE event_id = %s AND status = 'CONFIRMED'", (event_id,)
+    ).fetchone()[0]
+    return row[0], row[0] - used
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -29,6 +46,10 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _json(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        return json.loads(self.rfile.read(length) or b"{}")
+
     def do_GET(self):
         if self.path == "/health":
             try:
@@ -37,6 +58,13 @@ class Handler(BaseHTTPRequestHandler):
             except psycopg.Error:
                 return self._send(503, {"status": "database unavailable"})
             return self._send(200, {"status": "ok"})
+        if self.path.startswith("/events/"):
+            event_id = self.path.split("/", 2)[2]
+            with psycopg.connect(DB_URL) as conn:
+                capacity, left = remaining(conn, event_id)
+            if capacity is None:
+                return self._send(404, {"error": "not found"})
+            return self._send(200, {"event": {"id": event_id, "capacity": capacity, "remaining": left}})
         if self.path.startswith("/bookings/"):
             booking_id = self.path.split("/", 2)[2]
             with psycopg.connect(DB_URL) as conn:
@@ -47,10 +75,15 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
+        if self.path == "/events":
+            capacity = int(self._json().get("capacity", 0))
+            event_id = uuid.uuid4().hex
+            with psycopg.connect(DB_URL) as conn:
+                conn.execute("INSERT INTO events (id, capacity) VALUES (%s, %s)", (event_id, capacity))
+            return self._send(201, {"event": {"id": event_id, "capacity": capacity, "remaining": capacity}})
         if self.path != "/bookings":
             return self._send(404, {"error": "not found"})
-        length = int(self.headers.get("Content-Length") or 0)
-        payload = json.loads(self.rfile.read(length) or b"{}")
+        payload = self._json()
         event_id, user_id = payload.get("event"), payload.get("user")
         booking_id = str(uuid.uuid4())
         with psycopg.connect(DB_URL) as conn:
@@ -72,5 +105,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
         return self._send(201, {"booking": {"id": booking_id, "state": "CONFIRMED"}})
 
+
+with psycopg.connect(DB_URL) as _conn:
+    _conn.execute(SCHEMA)
 
 ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()

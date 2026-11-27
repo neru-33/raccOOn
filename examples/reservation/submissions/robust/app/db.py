@@ -1,4 +1,4 @@
-"""Connection pool and the app's own schema objects."""
+"""Connection pool and schema."""
 
 from psycopg_pool import ConnectionPool
 
@@ -8,6 +8,26 @@ from app.config import Settings
 _MIGRATION_LOCK_KEY = 7_421_001
 
 _MIGRATION = """
+CREATE TABLE IF NOT EXISTS events (
+    id          TEXT PRIMARY KEY,
+    capacity    INTEGER NOT NULL CHECK (capacity >= 0),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS bookings (
+    id          TEXT PRIMARY KEY,
+    event_id    TEXT NOT NULL REFERENCES events (id),
+    user_id     TEXT NOT NULL,
+    status      TEXT NOT NULL CHECK (status IN ('confirmed', 'cancelled')),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One confirmed seat per user per event, enforced by the database as well.
+CREATE UNIQUE INDEX IF NOT EXISTS bookings_one_confirmed_per_user
+    ON bookings (event_id, user_id) WHERE status = 'confirmed';
+
+CREATE INDEX IF NOT EXISTS bookings_event_status_idx ON bookings (event_id, status);
+
 CREATE TABLE IF NOT EXISTS idempotency_keys (
     key            TEXT PRIMARY KEY,
     fingerprint    TEXT NOT NULL,
@@ -32,10 +52,10 @@ def create_pool(settings: Settings) -> ConnectionPool:
 
 
 def migrate(pool: ConnectionPool) -> None:
-    """Create the app-owned tables. The shared events/reservations tables are never altered.
+    """Create tables and indexes.
 
     Several workers start at once; a transaction-level advisory lock keeps
-    concurrent CREATE TABLE IF NOT EXISTS statements from racing.
+    concurrent CREATE ... IF NOT EXISTS statements from racing.
     """
     with pool.connection() as conn, conn.transaction():
         conn.execute("SELECT pg_advisory_xact_lock(%s)", (_MIGRATION_LOCK_KEY,))

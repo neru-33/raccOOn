@@ -1,4 +1,4 @@
-"""Run the example apps in examples/ through the compose-postgres-k6 runner.
+"""Run the reservation example submissions through the compose-postgres-k6 runner.
 
 Needs Docker and builds images, so it runs only with RACCOON_DOCKER_TESTS=1.
 """
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 ROOT = contracts.CONTRACTS_DIR.parent
-TASK_DIR = ROOT / "tasks" / "reservation"
+TASK_DIR = ROOT / "examples" / "reservation"
 TASK = json.loads((TASK_DIR / "task.json").read_text(encoding="utf-8"))
 REF = {"path": "README.md", "start_line": 1, "end_line": 1}
 
@@ -65,9 +65,41 @@ CANDIDATES = {
 }
 
 
+def _event_ops(create_path, body, id_ptr, get_path, remaining_ptr):
+    def call(method, path, tpl, code, pointer, output):
+        return {
+            "protocol": "http",
+            "method": method,
+            "path_template": path,
+            "query_template": {},
+            "body_template": tpl,
+            "success_codes": [code],
+            "response_fields": {output: {"pointer": pointer}},
+            "source_ref": REF,
+        }
+
+    return (
+        call("POST", create_path, body, 201, id_ptr, "event_id"),
+        call("GET", get_path, None, 200, remaining_ptr, "remaining_seats"),
+    )
+
+
+EVENT_OPS = {
+    "basic": _event_ops("/events", {"capacity": "{capacity}"}, "/id", "/events/{event_id}", "/remaining"),
+    "local-lock": _event_ops("/sessions", {"seats": "{capacity}"}, "/data/id", "/sessions/{event_id}",
+                             "/data/available"),
+    "robust": _event_ops("/v1/events", {"capacity": "{capacity}"}, "/event/eventId", "/v1/events/{event_id}",
+                         "/event/remainingSeats"),
+}
+CANDIDATES = {
+    app: {"create_event": EVENT_OPS[app][0], **ops, "get_event": EVENT_OPS[app][1]}
+    for app, ops in CANDIDATES.items()
+}
+
+
 def _session(tmp_path: Path, app: str):
     snapshot = tmp_path / app
-    shutil.copytree(ROOT / "examples" / app, snapshot, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
+    shutil.copytree(TASK_DIR / "submissions" / app, snapshot, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
     run_meta = {
         "schema_version": 1,
         "run_id": f"run-example-{app}-{uuid.uuid4().hex[:6]}",
@@ -137,8 +169,9 @@ def test_robust_app_idempotency_and_duplicate_user(tmp_path: Path) -> None:
     session = _session(tmp_path, "robust")
     try:
         assert session.start()["status"] == "ready"
-        event_id = session._seed_event("idem", 5)
-        base, path = session._base_url, f"/v1/events/{event_id}/bookings"
+        base = session._base_url
+        event_id = _post(base, "/v1/events", {"capacity": 5}, {})[2]["event"]["eventId"]
+        path = f"/v1/events/{event_id}/bookings"
         key = {"Idempotency-Key": str(uuid.uuid4())}
 
         first = _post(base, path, {"userId": "u1"}, key)

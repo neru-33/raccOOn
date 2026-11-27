@@ -1,12 +1,12 @@
 # 실행기 `compose-postgres-k6`
 
-Docker Compose로 제출 앱을 띄우고, PostgreSQL 테스트 DB를 붙여 회차마다 초기화·시드·집계하며, 동시 요청은 k6로 보낸다. 구현은 `src/evaluator/runners/compose_postgres_k6.py`이고, `task.json`의 `runner_id`가 `compose-postgres-k6`이면 `evaluator.runners.open_session`이 이 실행기를 만든다.
+Docker Compose로 제출 앱을 띄우고 PostgreSQL을 제공하며, 동시 요청은 k6로 보낸다. 시험 데이터 준비와 집계는 **제출물의 API로** 한다. 실행기는 제출물의 테이블을 읽거나 쓰지 않으므로 제출물은 저장 구조를 자유롭게 설계할 수 있다. 구현은 `src/evaluator/runners/compose_postgres_k6.py`이고, `task.json`의 `runner_id`가 `compose-postgres-k6`이면 `evaluator.runners.open_session`이 이 실행기를 만든다.
 
 ## 필요 환경
 
 - Docker Engine과 Docker Compose v2
 - 실행 중 내려받거나 사용하는 이미지: `runner_config.tools`의 `postgres`, `k6` 이미지
-- 파이썬 추가 의존성 없음. DB 조작은 DB 컨테이너 안의 `psql`, HTTP는 표준 라이브러리로 한다.
+- 파이썬 추가 의존성 없음. HTTP는 표준 라이브러리로 한다.
 
 ## 실행 순서
 
@@ -16,7 +16,7 @@ Docker Compose로 제출 앱을 띄우고, PostgreSQL 테스트 DB를 붙여 회
 | 2 | 제출본 Compose 파일 확인 | `submission` |
 | 3 | 도구 이미지 준비(없으면 pull) | `environment` |
 | 4 | 덮어쓰기 파일 작성 후 `docker compose config` | `submission` |
-| 5 | DB 서비스 기동(`--wait`), `fixtures.schema_sql` 적용 | `environment` |
+| 5 | DB 서비스 기동(`--wait`) | `environment` |
 | 6 | 앱 빌드·기동(`--no-deps`), 앱 포트를 `127.0.0.1`의 임의 포트로 공개 | `submission` |
 | 7 | `ready_timeout_seconds` 안에 `GET health_path`가 200이면 준비 완료. 앱 컨테이너가 먼저 종료되면 즉시 실패 | `submission` |
 | 8 | 앱에서 OpenAPI 문서를 찾아 `discovered`에 담음(`/openapi.json`, `/v3/api-docs`, `/swagger.json`, `/docs/openapi.json`) | 없으면 빈 배열 |
@@ -30,7 +30,7 @@ Docker Compose로 제출 앱을 띄우고, PostgreSQL 테스트 DB를 붙여 회
 | 서비스 | 내용 |
 | --- | --- |
 | 앱(`app.service`) | `app.database_url_env` 이름으로 DB 접속 URL 주입, `app.port`를 `127.0.0.1`의 임의 포트로 공개 |
-| `raccoon-db` | `postgres` 도구 이미지, 실행마다 무작위 비밀번호, `pg_isready` 헬스체크 |
+| `raccoon-db` | `postgres` 도구 이미지, 실행마다 무작위 비밀번호, `pg_isready` 헬스체크. 비어 있는 DB이며 테이블은 제출물이 만든다 |
 | `raccoon-k6` | `k6` 도구 이미지, `tools` 프로필(검사 때만 `docker compose run`으로 실행) |
 
 ## `runner_config` 키
@@ -40,19 +40,33 @@ Docker Compose로 제출 앱을 띄우고, PostgreSQL 테스트 DB를 붙여 회
 | `database.mode` | `engine_managed`만 구현되어 있다. `external`은 아직 `environment` 오류로 끝난다 |
 | `tools` | `postgres`, `k6` 항목 필수. k6의 `options.batch`, `options.batchPerHost` 사용 |
 | `app` | `compose_file`, `service`, `port`, `health_path`, `ready_timeout_seconds`, `env`, `database_url_env`(`env`에 선언된 이름 중 하나) |
-| `fixtures.schema_sql` | `task.json` 기준 경로의 SQL 파일. 기동 시 한 번 적용 |
-| `fixtures.reset_sql` | 각 검사 회차 전에 실행 |
-| `fixtures.seed_event_sql` | 시험·회차마다 이벤트를 넣는다. psql 변수 `:'event_id'`, `:capacity` 사용 |
-| `fixtures.confirmed_count_sql` | 동시 요청 뒤 확정 건수를 센다. `:'event_id'` 사용, 결과는 정수 한 개 |
-| `inputs` | `from`으로 연결되지 않은 동작 입력의 값 출처. `seeded_event`(이번 시험·회차의 이벤트 ID), `unique_user`(요청마다 다른 사용자 ID) |
-| `probe.event_capacity` | 매핑 시험용 이벤트의 정원 |
+| `inputs` | `from`으로 연결되지 않은 동작 입력의 값 출처. `scenario_capacity`(이번 시험·회차의 정원), `unique_user`(요청마다 다른 사용자 ID) |
+| `accounting` | 준비와 집계에 쓰는 논리 동작. 아래 표 |
+| `probe.event_capacity` | 매핑 시험에서 등록할 이벤트의 정원 |
 | `scenarios.<test_id>` | 검사 방식. 아래 두 종류 |
+
+### `accounting`
+
+| 키 | 내용 |
+| --- | --- |
+| `setup_operation` | 시험·회차마다 정원 있는 대상을 만드는 동작(예: 이벤트 등록). `from` 입력을 가질 수 없다 |
+| `reserve_operation` | 동시 요청으로 보낼 동작(예: 예약 생성). `from` 입력은 `setup_operation`의 출력만 가리킬 수 있다 |
+| `confirmed_output` | `reserve_operation`의 출력 중 확정 여부를 나타내는 것 |
+| `count_operation` | 대상의 상태를 읽는 동작(예: 이벤트 조회). `from` 입력은 `setup_operation`의 출력만 가리킬 수 있다 |
+| `count_output` | `count_operation`의 정수 출력 |
+| `count_mode` | `remaining`: 출력이 남은 자리라서 확정 건수 = 정원 − 출력. `confirmed`: 출력이 확정 건수 |
+
+**매핑 시험의 집계 확인.** 매핑 시험은 모든 동작을 선언 순서대로 한 번 호출한다(새 대상 등록 → 예약 1건 → 예약 조회 → 대상 조회). 그 뒤 `count_operation`으로 계산한 확정 건수가 방금 만든 예약의 확정 여부(1 또는 0)와 다르면 매핑을 확인하지 않고 `failed_stage: response_field`로 돌려준다. 정원이나 다른 숫자 필드를 남은 자리로 잘못 연결한 후보를 걸러낸다.
 
 ### 검사 방식
 
-**`operation_sequence`**: 회차마다 새 이벤트(`event_capacity`)를 만들고 확인된 매핑의 동작을 선언 순서대로 한 번씩 호출한다. `metrics`는 지표 이름에서 동작 이름으로의 대응이며, 그 동작이 성공하고 `expect_outputs`의 값과 응답 출력이 같으면 `true`다. 앞 동작이 실패해 뒤 동작을 부르지 못하면 뒤 지표는 `false`다. 응답을 받지 못한 요청이 있으면 그 회차는 실행 오류다.
+**`operation_sequence`**: 회차마다 정원 `event_capacity`로 모든 동작을 선언 순서대로 한 번씩 호출한다. `metrics`는 지표 이름에서 동작 이름으로의 대응이며, 그 동작이 성공하고 `expect_outputs`의 값과 응답 출력이 같으면 `true`다. 앞 동작이 실패해 뒤 동작을 부르지 못하면 뒤 지표는 `false`다. 응답을 받지 못한 요청이 있으면 그 회차는 실행 오류다.
 
-**`concurrent_burst`**: 회차마다 새 이벤트(`event_capacity`)를 만들고 `operation`을 `requests`건 한 번에 보낸다(k6 `http.batch`). 응답 중 `success_codes`에 들고 `confirmed_output` 필드가 확정으로 해석된 수를 `response_metric`, 모든 응답을 받은 뒤 `confirmed_count_sql` 결과를 `persisted_metric`에 기록한다. 한 요청이라도 응답이 없거나 시간 초과면 늦은 커밋 가능성 때문에 DB 집계를 쓰지 않고 그 회차를 실행 오류(`load_no_response`)로 남긴다.
+**`concurrent_burst`**: 회차마다 `setup_operation`으로 정원 `event_capacity`인 대상을 만들고, `reserve_operation`을 `requests`건 한 번에 보낸다(k6 `http.batch`). 응답 중 `success_codes`에 들고 `confirmed_output`이 확정으로 해석된 수를 `response_metric`, 모든 응답을 받은 뒤 `count_operation`으로 계산한 확정 건수를 `persisted_metric`에 기록한다.
+
+- `response_metric`은 실행기가 응답을 직접 센 값이고, `persisted_metric`은 **제출물이 API로 보고한 값**이다. 제출물은 남은 자리를 0 아래로 보여 주지 않는 식으로 실제보다 적게 보고할 수 있다. 그래서 정원 초과를 0점 처리하는 규칙은 `response_metric`을 기준으로 두고, `persisted_metric`은 회차별 일치 확인에 쓴다. 집계 출처는 `observations.json`의 `runner_info.count_source`에 남는다.
+- 한 요청이라도 응답이 없거나 시간 초과면 늦은 커밋 가능성 때문에 집계를 쓰지 않고 그 회차를 실행 오류(`load_no_response`)로 남긴다.
+- 준비나 집계 동작이 실패하면 그 회차는 실행 오류(`setup`, `count`)다.
 
 실행 오류가 나면 그때까지 완료된 회차의 관측 행을 보존하고 `observations.json`을 `execution_error`로 끝낸다.
 
@@ -65,7 +79,6 @@ Docker Compose로 제출 앱을 띄우고, PostgreSQL 테스트 DB를 붙여 회
 | `not_started` | `start()`가 성공하기 전에 호출 |
 | `unknown_mapping` | 이번 실행에서 확인되지 않은 `mapping_id`로 `run_checks` 호출 |
 | `invalid_arguments` | `documented_operations`가 객체가 아님 |
-| `execution_error` | 매핑 시험용 이벤트를 넣지 못함 |
 
 후보가 실행할 수 없는 형태(동작 누락, 절대 URL, 선언되지 않은 변수 등)이면 예외 대신 `failed_stage: candidate_schema`인 시험 결과를 돌려주고 시험 횟수에 포함한다.
 

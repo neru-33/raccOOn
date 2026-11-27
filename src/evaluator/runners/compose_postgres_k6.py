@@ -1,14 +1,17 @@
-"""Runner ``compose-postgres-k6``: Docker Compose app, PostgreSQL fixtures, k6 bursts.
+"""Runner ``compose-postgres-k6``: Docker Compose app, a provided PostgreSQL, k6 bursts.
 
 Lifecycle: ``start`` brings up the database and the submission, ``probe_mapping``
 verifies candidate calls, ``run_checks`` runs every declared scenario round,
 ``close`` removes everything this run created.
+
+The runner never reads or writes the submission's tables. Test data is created
+and counted through the submission's own API, using the operations named in
+``runner_config.accounting``.
 """
 
 from __future__ import annotations
 
 import json
-import re
 import secrets
 import shutil
 import tempfile
@@ -28,8 +31,17 @@ RUNNER_ID = "compose-postgres-k6"
 LOG_CHARS = 4000
 OPENAPI_PATHS = ["/openapi.json", "/v3/api-docs", "/swagger.json", "/docs/openapi.json"]
 OPENAPI_MAX_CHARS = 60_000
-INPUT_SOURCES = {"seeded_event", "unique_user"}
+INPUT_SOURCES = {"scenario_capacity", "unique_user"}
 SCENARIO_KINDS = {"operation_sequence", "concurrent_burst"}
+COUNT_MODES = {"remaining", "confirmed"}
+ACCOUNTING_KEYS = (
+    "setup_operation",
+    "reserve_operation",
+    "confirmed_output",
+    "count_operation",
+    "count_output",
+    "count_mode",
+)
 
 
 class RunnerConfigError(ValueError):
@@ -63,10 +75,6 @@ def _image_version(image: str) -> str | None:
     return name.split(":", 1)[1] if ":" in name else None
 
 
-def _safe_id(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-
-
 class ComposePostgresK6Runner:
     def __init__(self, task: dict[str, Any], task_dir: Path, snapshot_dir: Path, run_meta: dict[str, Any]) -> None:
         self.task = task
@@ -84,8 +92,7 @@ class ComposePostgresK6Runner:
         self.ready_timeout: float = float(app.get("ready_timeout_seconds", 60))
         self.db_image: str = tools["postgres"]["image"]
         self.k6_tool: dict[str, Any] = tools["k6"]
-        self.fixtures: dict[str, str] = self.config["fixtures"]
-        self.schema_sql = (self.task_dir / self.fixtures["schema_sql"]).read_text(encoding="utf-8")
+        self.accounting: dict[str, str] = self.config["accounting"]
 
         self._workdir = Path(tempfile.mkdtemp(prefix="raccoon-runner-"))
         self._password = secrets.token_urlsafe(18)
@@ -101,7 +108,7 @@ class ComposePostgresK6Runner:
         self._log = ProbeLog()
         self._maps = count(1)
         self._users = count(1)
-        self._event_token = secrets.token_hex(3)
+        self._user_token = secrets.token_hex(3)
 
     # ------------------------------------------------------------------ config
 
@@ -119,8 +126,9 @@ class ComposePostgresK6Runner:
             tool_ids = {t["id"] for t in cfg["tools"]}
             if not {"postgres", "k6"} <= tool_ids:
                 raise RunnerConfigError("tools must declare postgres and k6")
-            for key in ("schema_sql", "reset_sql", "seed_event_sql", "confirmed_count_sql"):
-                cfg["fixtures"][key]
+            acc = cfg["accounting"]
+            for key in ACCOUNTING_KEYS:
+                acc[key]
             inputs = cfg.get("inputs", {})
             scenarios = cfg["scenarios"]
         except KeyError as err:
@@ -133,6 +141,23 @@ class ComposePostgresK6Runner:
             for name, input_spec in spec["inputs"].items():
                 if not input_spec.get("from") and name not in inputs:
                     raise RunnerConfigError(f"runner_config.inputs has no source for {op_name}.{name}")
+        setup, reserve, counter = acc["setup_operation"], acc["reserve_operation"], acc["count_operation"]
+        for role, op in (("setup_operation", setup), ("reserve_operation", reserve), ("count_operation", counter)):
+            if op not in ops:
+                raise RunnerConfigError(f"accounting.{role} {op!r} is not a task operation")
+        if any(i.get("from") for i in ops[setup]["inputs"].values()):
+            raise RunnerConfigError("accounting.setup_operation cannot take linked inputs")
+        for op in (reserve, counter):
+            for name, input_spec in ops[op]["inputs"].items():
+                source = input_spec.get("from")
+                if source and source.split(".", 1)[0] != setup:
+                    raise RunnerConfigError(f"{op}.{name} may only link to {setup} outputs")
+        if acc["confirmed_output"] not in ops[reserve]["outputs"]:
+            raise RunnerConfigError(f"accounting.confirmed_output must be an output of {reserve}")
+        if acc["count_output"] not in ops[counter]["outputs"]:
+            raise RunnerConfigError(f"accounting.count_output must be an output of {counter}")
+        if acc["count_mode"] not in COUNT_MODES:
+            raise RunnerConfigError(f"accounting.count_mode must be one of {sorted(COUNT_MODES)}")
         for test_id, decl in (self.task.get("metrics") or {}).items():
             scenario = scenarios.get(test_id)
             if not scenario or scenario.get("kind") not in SCENARIO_KINDS:
@@ -144,13 +169,6 @@ class ComposePostgresK6Runner:
                 if set(scenario["metrics"].values()) - set(ops):
                     raise RunnerConfigError(f"{test_id}: scenario metrics refer to unknown operations")
             else:
-                op = scenario.get("operation")
-                if op not in ops:
-                    raise RunnerConfigError(f"{test_id}: unknown operation {op!r}")
-                if any(i.get("from") for i in ops[op]["inputs"].values()):
-                    raise RunnerConfigError(f"{test_id}: burst operation cannot take linked inputs")
-                if scenario.get("confirmed_output") not in ops[op]["outputs"]:
-                    raise RunnerConfigError(f"{test_id}: confirmed_output must be an output of {op}")
                 if {scenario.get("response_metric"), scenario.get("persisted_metric")} != values:
                     raise RunnerConfigError(f"{test_id}: response_metric and persisted_metric must cover {sorted(values)}")
 
@@ -220,7 +238,6 @@ class ComposePostgresK6Runner:
             raise _StartFailure("compose_config", "submission", "compose configuration is invalid", err.output) from err
         try:
             self.project.up(dc.DB_SERVICE, wait=True, timeout=180)
-            self.project.psql(self.schema_sql)
             self._db_version = self.project.psql("SHOW server_version").strip() or None
         except dc.CommandError as err:
             raise _StartFailure("database", "environment", "database did not become ready", err.output) from err
@@ -289,21 +306,27 @@ class ComposePostgresK6Runner:
         if not self._started:
             raise ToolError("not_started", "call start_submission first")
 
-    def _seed_event(self, label: str, capacity: int) -> str:
-        event_id = f"{_safe_id(label)}-{self._event_token}"
-        self.project.psql(self.fixtures["seed_event_sql"], {"event_id": event_id, "capacity": int(capacity)})
-        return event_id
-
-    def _input_factory(self, event_id: str):
+    def _input_factory(self, capacity: int):
+        """Values for operation inputs that are not linked with ``from``."""
         sources = self.config.get("inputs", {})
 
         def value(op: str, name: str) -> Any:
             source = sources[name]
-            if source == "seeded_event":
-                return event_id
-            return f"u-{next(self._users)}"
+            if source == "scenario_capacity":
+                return int(capacity)
+            return f"u-{self._user_token}-{next(self._users)}"
 
         return value
+
+    def _operations(self, *names: str) -> dict[str, Any]:
+        ops = self.task.get("operations") or {}
+        return {name: ops[name] for name in names}
+
+    def _persisted_from(self, outputs: dict[str, Any], capacity: int) -> int:
+        value = outputs[self.accounting["count_output"]]
+        if self.accounting["count_mode"] == "remaining":
+            return int(capacity) - int(value)
+        return int(value)
 
     def probe_mapping(self, candidate: dict[str, Any], documented_operations: dict[str, Any] | None = None) -> dict[str, Any]:
         self._require_started()
@@ -316,14 +339,29 @@ class ComposePostgresK6Runner:
         if problem:
             outcome = SequenceResult(ok=False, failed_stage="candidate_schema", message=problem)
             return self._log.record(candidate, outcome, None)
-        try:
-            event_id = self._seed_event(f"probe-{self._log.attempts + 1}", self.config["probe"]["event_capacity"])
-        except dc.CommandError as err:
-            raise ToolError("execution_error", f"cannot seed probe data: {err}") from err
+        capacity = int(self.config["probe"]["event_capacity"])
         transport = UrllibTransport(self._base_url)
-        outcome = run_sequence(operations, candidate, transport, self._input_factory(event_id), timeout=10)
+        outcome = run_sequence(operations, candidate, transport, self._input_factory(capacity), timeout=10)
+        if outcome.ok:
+            self._check_count_meaning(outcome, capacity)
         mapping_id = f"map-{next(self._maps)}" if outcome.ok else None
         return self._log.record(candidate, outcome, mapping_id)
+
+    def _check_count_meaning(self, outcome: SequenceResult, capacity: int) -> None:
+        """The probe made one reservation; the count operation must reflect exactly that."""
+        acc = self.accounting
+        confirmed = outcome.outputs[acc["reserve_operation"]][acc["confirmed_output"]] is True
+        expected = 1 if confirmed else 0
+        actual = self._persisted_from(outcome.outputs[acc["count_operation"]], capacity)
+        if actual != expected:
+            state = "confirmed" if confirmed else "unconfirmed"
+            outcome.ok = False
+            outcome.failed_stage = "response_field"
+            outcome.failed_operation = acc["count_operation"]
+            outcome.message = (
+                f"{acc['count_output']} implies {actual} confirmed reservation(s) on a new event with "
+                f"capacity {capacity} after one {state} reservation; expected {expected}"
+            )
 
     def mapping_artifact(self) -> dict[str, Any] | None:
         return self._log.artifact(self.run_meta)
@@ -345,7 +383,10 @@ class ComposePostgresK6Runner:
                 scenario = self.config["scenarios"][test_id]
                 for rnd in decl["rounds"]:
                     try:
-                        metrics = self._run_round(test_id, rnd, scenario, operations, calls)
+                        if scenario["kind"] == "operation_sequence":
+                            metrics = self._sequence_round(scenario, operations, calls)
+                        else:
+                            metrics = self._burst_round(scenario, calls)
                     except _RoundFailure as fail:
                         error = {"stage": fail.stage, "message": str(fail), "test_id": test_id, "round": rnd}
                         raise
@@ -361,35 +402,23 @@ class ComposePostgresK6Runner:
             "runner_info": {
                 "runner_id": RUNNER_ID,
                 "database_mode": self.config["database"]["mode"],
+                # The persisted count comes from the submission's own API, not from the database.
+                "count_source": {
+                    "kind": "api",
+                    "operation": self.accounting["count_operation"],
+                    "output": self.accounting["count_output"],
+                    "mode": self.accounting["count_mode"],
+                },
                 "tools": [
                     {"id": t["id"], "version": t["version"] or "unknown"} for t in self._tool_status(True)
                 ],
             },
         }
 
-    def _psql_step(self, stage: str, sql: str, variables: dict[str, Any] | None = None) -> str:
-        try:
-            return self.project.psql(sql, variables)
-        except dc.CommandError as err:
-            raise _RoundFailure(stage, f"{stage} failed: {err.output[-500:]}") from err
-
-    def _run_round(
-        self,
-        test_id: str,
-        rnd: int,
-        scenario: dict[str, Any],
-        operations: dict[str, Any],
-        calls: dict[str, Any],
-    ) -> dict[str, Any]:
-        self._psql_step("reset", self.fixtures["reset_sql"])
-        event_id = f"{_safe_id(test_id)}-r{rnd}-{self._event_token}"
-        self._psql_step("seed", self.fixtures["seed_event_sql"], {"event_id": event_id, "capacity": int(scenario["event_capacity"])})
-        if scenario["kind"] == "operation_sequence":
-            return self._sequence_round(scenario, operations, calls, event_id)
-        return self._burst_round(scenario, operations, calls, event_id)
-
-    def _sequence_round(self, scenario, operations, calls, event_id) -> dict[str, Any]:
-        result = run_sequence(operations, calls, UrllibTransport(self._base_url), self._input_factory(event_id), timeout=10)
+    def _sequence_round(self, scenario, operations, calls) -> dict[str, Any]:
+        """Every operation once, in order, on a new event registered through the API."""
+        factory = self._input_factory(int(scenario["event_capacity"]))
+        result = run_sequence(operations, calls, UrllibTransport(self._base_url), factory, timeout=10)
         if result.failed_stage == "transport":
             raise _RoundFailure("request", result.message or "no response")
         expected = scenario.get("expect_outputs", {})
@@ -401,15 +430,36 @@ class ComposePostgresK6Runner:
             )
         return metrics
 
-    def _burst_round(self, scenario, operations, calls, event_id) -> dict[str, Any]:
-        op = scenario["operation"]
-        call = calls[op]
-        factory = self._input_factory(event_id)
+    def _run_step(self, stage: str, names: tuple[str, ...], calls, factory, prior=None) -> dict[str, Any]:
+        """Run setup or count operations; any failure makes the round unmeasurable."""
+        result = run_sequence(
+            self._operations(*names), calls, UrllibTransport(self._base_url), factory, timeout=10, prior_outputs=prior
+        )
+        if not result.ok:
+            detail = f"{result.failed_operation}: {result.message}"
+            raise _RoundFailure(stage, f"{stage} failed ({result.failed_stage}) at {detail}")
+        return result.outputs
+
+    def _burst_round(self, scenario, calls) -> dict[str, Any]:
+        acc = self.accounting
+        capacity = int(scenario["event_capacity"])
+        factory = self._input_factory(capacity)
+        setup = self._run_step("setup", (acc["setup_operation"],), calls, factory)
+
+        reserve = acc["reserve_operation"]
+        call = calls[reserve]
         timeout_s = int(scenario.get("request_timeout_seconds", 10))
         base = f"http://{self.app_service}:{self.app_port}"
         requests = []
         for _ in range(int(scenario["requests"])):
-            values = {name: factory(op, name) for name in operations[op]["inputs"]}
+            values = {}
+            for name, spec in self._operations(reserve)[reserve]["inputs"].items():
+                source = spec.get("from")
+                if source:
+                    src_op, src_out = source.split(".", 1)
+                    values[name] = setup[src_op][src_out]
+                else:
+                    values[name] = factory(reserve, name)
             try:
                 req = render_request(call, values)
             except TemplateError as err:
@@ -427,7 +477,7 @@ class ComposePostgresK6Runner:
         script = build_script(
             requests,
             success_codes=call["success_codes"],
-            confirmed_field=call["response_fields"][scenario["confirmed_output"]],
+            confirmed_field=call["response_fields"][acc["confirmed_output"]],
             batch=int(options.get("batch", len(requests))),
             batch_per_host=int(options.get("batchPerHost", len(requests))),
         )
@@ -443,13 +493,13 @@ class ComposePostgresK6Runner:
             raise _RoundFailure(
                 "load_no_response",
                 f"{burst.no_response} of {burst.total} requests got no response; "
-                "the database count is not used because late commits are possible",
+                "the count is not used because late commits are possible",
             )
-        raw = self._psql_step("db_read", self.fixtures["confirmed_count_sql"], {"event_id": event_id}).strip()
+        counted = self._run_step("count", (acc["count_operation"],), calls, factory, prior=setup)
         try:
-            persisted = int(raw.splitlines()[-1])
-        except (ValueError, IndexError) as err:
-            raise _RoundFailure("db_read", f"unexpected count result {raw!r}") from err
+            persisted = self._persisted_from(counted[acc["count_operation"]], capacity)
+        except (KeyError, TypeError, ValueError) as err:
+            raise _RoundFailure("count", f"cannot read {acc['count_output']}: {err}") from err
         return {scenario["response_metric"]: burst.confirmed, scenario["persisted_metric"]: persisted}
 
     # ------------------------------------------------------------------- close

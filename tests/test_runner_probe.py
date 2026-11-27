@@ -28,17 +28,25 @@ OPS = TASK["operations"]
 
 
 class FakeApp:
-    """Minimal in-memory app for the /enrollments API of the oversell example."""
+    """Minimal in-memory app for the /sessions and /enrollments API of the oversell example."""
 
-    def __init__(self, broken_create_path: str | None = None, get_returns_other_id: bool = False) -> None:
+    def __init__(self, get_returns_other_id: bool = False) -> None:
+        self.sessions: dict[str, int] = {}
         self.rows: dict[str, dict] = {}
         self.ids = count(1)
-        self.broken_create_path = broken_create_path
         self.get_returns_other_id = get_returns_other_id
         self.calls: list[tuple[str, str]] = []
 
     def send(self, method, path, headers, body, timeout):
         self.calls.append((method, path))
+        if method == "POST" and path == "/sessions":
+            sid = f"s-{next(self.ids)}"
+            self.sessions[sid] = json.loads(body)["seats"]
+            return HttpResponse(201, json.dumps({"data": {"id": sid}}).encode())
+        if method == "GET" and path.startswith("/sessions/"):
+            sid = path.rsplit("/", 1)[1]
+            taken = sum(1 for r in self.rows.values() if r["session"] == sid)
+            return HttpResponse(200, json.dumps({"data": {"available": self.sessions[sid] - taken}}).encode())
         if method == "POST" and path == "/enrollments":
             payload = json.loads(body)
             rid = f"r-{next(self.ids)}"
@@ -53,8 +61,8 @@ class FakeApp:
         return HttpResponse(404, b"not found")
 
 
-def _inputs(op: str, name: str) -> str:
-    return {"event_id": "evt-1", "user_id": "u-1"}[name]
+def _inputs(op: str, name: str):
+    return {"capacity": 5, "user_id": "u-1"}[name]
 
 
 def _candidate(variant: str, attempt: int = -1) -> dict:
@@ -85,8 +93,25 @@ def test_sequence_verifies_linked_operations() -> None:
     app = FakeApp()
     result = run_sequence(OPS, _candidate("oversell"), app, _inputs, timeout=5)
     assert result.ok
-    assert result.outputs["create_reservation"] == {"reservation_id": "r-1", "confirmed": True}
-    assert app.calls == [("POST", "/enrollments"), ("GET", "/enrollments/r-1")]
+    assert result.outputs["create_event"] == {"event_id": "s-1"}
+    assert result.outputs["create_reservation"] == {"reservation_id": "r-2", "confirmed": True}
+    assert result.outputs["get_event"] == {"remaining_seats": 4}
+    assert app.calls == [
+        ("POST", "/sessions"),
+        ("POST", "/enrollments"),
+        ("GET", "/enrollments/r-2"),
+        ("GET", "/sessions/s-1"),
+    ]
+
+
+def test_prior_outputs_resolve_links_for_a_partial_sequence() -> None:
+    app = FakeApp()
+    created = run_sequence({"create_event": OPS["create_event"]}, _candidate("oversell"), app, _inputs, timeout=5)
+    counted = run_sequence(
+        {"get_event": OPS["get_event"]}, _candidate("oversell"), app, _inputs, timeout=5,
+        prior_outputs=created.outputs,
+    )
+    assert counted.ok and counted.outputs["get_event"] == {"remaining_seats": 5}
 
 
 def test_wrong_create_path_fails_at_status_code() -> None:

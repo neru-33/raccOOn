@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "task_id": "reservation-v1",
-  "task_summary": "정원이 있는 이벤트의 예약 생성과 예약 확정 상태 조회 API. 마지막 한 자리에 동시에 여러 요청이 들어와도 예약은 한 건만 확정되어야 한다.",
+  "task_summary": "정원이 있는 이벤트의 등록, 예약 생성, 예약 확정 상태 조회, 남은 자리 조회 API. 마지막 한 자리에 동시에 여러 요청이 들어와도 예약은 한 건만 확정되어야 한다.",
   "runner_id": "compose-postgres-k6",
   "runner_config": {
     "database": {
@@ -36,15 +36,17 @@
       ],
       "database_url_env": "DATABASE_URL"
     },
-    "fixtures": {
-      "schema_sql": "fixtures/schema.sql",
-      "reset_sql": "TRUNCATE reservations, events",
-      "seed_event_sql": "INSERT INTO events (id, capacity) VALUES (:'event_id', :capacity)",
-      "confirmed_count_sql": "SELECT count(*) FROM reservations WHERE event_id = :'event_id' AND status = 'CONFIRMED'"
-    },
     "inputs": {
-      "event_id": "seeded_event",
+      "capacity": "scenario_capacity",
       "user_id": "unique_user"
+    },
+    "accounting": {
+      "setup_operation": "create_event",
+      "reserve_operation": "create_reservation",
+      "confirmed_output": "confirmed",
+      "count_operation": "get_event",
+      "count_output": "remaining_seats",
+      "count_mode": "remaining"
     },
     "probe": {
       "event_capacity": 5
@@ -63,23 +65,37 @@
       },
       "reservation.concurrent": {
         "kind": "concurrent_burst",
-        "operation": "create_reservation",
         "event_capacity": 1,
         "requests": 50,
         "request_timeout_seconds": 10,
-        "confirmed_output": "confirmed",
         "response_metric": "confirmed_responses",
         "persisted_metric": "persisted_confirmed"
       }
     }
   },
   "operations": {
+    "create_event": {
+      "description": "운영자가 정원을 정해 이벤트를 등록한다.",
+      "inputs": {
+        "capacity": {
+          "type": "integer",
+          "description": "이벤트 정원"
+        }
+      },
+      "outputs": {
+        "event_id": {
+          "type": "id",
+          "description": "등록된 이벤트 ID"
+        }
+      }
+    },
     "create_reservation": {
       "description": "사용자가 이벤트 좌석 하나를 예약한다.",
       "inputs": {
         "event_id": {
           "type": "id",
-          "description": "예약할 이벤트 ID"
+          "description": "예약할 이벤트 ID",
+          "from": "create_event.event_id"
         },
         "user_id": {
           "type": "id",
@@ -114,6 +130,22 @@
         "confirmed": {
           "type": "bool",
           "description": "예약이 확정되었는지 여부"
+        }
+      }
+    },
+    "get_event": {
+      "description": "이벤트의 남은 자리를 조회한다.",
+      "inputs": {
+        "event_id": {
+          "type": "id",
+          "description": "조회할 이벤트 ID",
+          "from": "create_event.event_id"
+        }
+      },
+      "outputs": {
+        "remaining_seats": {
+          "type": "integer",
+          "description": "남은 자리 수"
         }
       }
     }
@@ -174,12 +206,12 @@
     {
       "id": "concurrent.single_confirmation",
       "type": "award_per_round",
-      "description": "정원 1인 이벤트에 동시 요청 50건, 회차마다 확정 1건",
+      "description": "정원 1인 이벤트에 동시 요청 50건. 어느 회차든 확정 응답이 2건 이상이면 0점, 아니면 회차마다 확정 응답 1건과 앱이 보고한 확정 1건일 때 배점",
       "test_id": "reservation.concurrent",
       "points": 8,
       "veto_if_any_round": [
         {
-          "metric": "persisted_confirmed",
+          "metric": "confirmed_responses",
           "op": "gte",
           "value": 2
         }

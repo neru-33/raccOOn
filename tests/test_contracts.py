@@ -534,18 +534,20 @@ def test_evidence_gap_withholds_quality_and_total() -> None:
     assert report["quality_score"] is None and report["total_score"] is None
 
 
-def test_example_fixtures_back_runner_queries() -> None:
-    fixtures = _example("task.json")["runner_config"]["fixtures"]
-    schema_sql = (EXAMPLES_DIR / fixtures["schema_sql"]).read_text(encoding="utf-8")
-    for table in ("events", "reservations"):
-        assert f"CREATE TABLE IF NOT EXISTS {table}" in schema_sql
-    assert ":'event_id'" in fixtures["seed_event_sql"] and ":capacity" in fixtures["seed_event_sql"]
-    assert ":'event_id'" in fixtures["confirmed_count_sql"]
+def test_accounting_operations_are_linked_through_the_setup_operation() -> None:
+    task = _example("task.json")
+    acc = task["runner_config"]["accounting"]
+    ops = task["operations"]
+    setup = acc["setup_operation"]
+    assert not any(spec.get("from") for spec in ops[setup]["inputs"].values())
+    for op in (acc["reserve_operation"], acc["count_operation"]):
+        links = [spec["from"] for spec in ops[op]["inputs"].values() if spec.get("from")]
+        assert links and all(link.split(".")[0] == setup for link in links)
+    assert acc["confirmed_output"] in ops[acc["reserve_operation"]]["outputs"]
+    assert ops[acc["count_operation"]]["outputs"][acc["count_output"]]["type"] == "integer"
+    assert "fixtures" not in task["runner_config"]
 
 
-def test_reservation_task_matches_contract_example() -> None:
-    root = contracts.CONTRACTS_DIR.parent / "tasks" / "reservation"
+def test_reservation_example_task_matches_contract_example() -> None:
+    root = contracts.CONTRACTS_DIR.parent / "examples" / "reservation"
     assert _load(root / "task.json") == _example("task.json")
-    assert (root / "fixtures" / "schema.sql").read_text(encoding="utf-8") == (
-        EXAMPLES_DIR / "fixtures" / "schema.sql"
-    ).read_text(encoding="utf-8")
