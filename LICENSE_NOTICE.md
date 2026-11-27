@@ -1,14 +1,15 @@
-# 라이선스 검토 안내
+# 라이선스 안내
 
-프로젝트에 적용할 라이선스는 지도교수 또는 담당자의 검토 후 확정한다.
+[Apache License 2.0](LICENSE)은 raccOOn이 배포 권한을 가진 자체 개발 코드와 그 문서에 적용됩니다. 대학 프로젝트 템플릿과 `assets/raccOOn-pixel-dot-arcade.svg`는 별도 라이선스 표기를 확인할 수 없어 이 부여 범위에서 제외합니다.
 
-## 확인 항목
+## 설계상 사용하는 외부 도구
 
-- 외부 OSS의 이름, 버전, 출처
-- 라이선스 종류
-- 코드 수정 여부
-- 배포 또는 공개 여부
-- 기업 제공 자료 또는 공개 제한 자료 포함 여부
+| 구성 요소 | 사용 방식 | 라이선스 |
+| --- | --- | --- |
+| Python | CLI 및 표준 라이브러리 | [PSF License](https://docs.python.org/3/license.html) |
+| OpenAI Python SDK | 모델 API 클라이언트 | [Apache-2.0](https://github.com/openai/openai-python/blob/main/LICENSE) |
+| Docker Compose | 제출 앱과 테스트 DB 기동 | [Apache-2.0](https://github.com/docker/compose/blob/main/LICENSE) |
+| PostgreSQL | 테스트 DB 서버 | [PostgreSQL License](https://www.postgresql.org/about/licence/) |
+| Grafana k6 | 별도 프로세스 또는 컨테이너에서 부하 검사 실행 | [AGPL-3.0](https://github.com/grafana/k6#license) |
 
-라이선스가 불명확한 코드, 데이터, 이미지, 모델 파일은 저장소에 포함하지 않는다.
-
+외부 도구에는 각 배포본의 조건이 적용됩니다. k6 바이너리나 컨테이너 이미지를 재배포할 경우 해당 배포본의 라이선스 고지 및 소스 제공 조건을 확인합니다.
