@@ -248,3 +248,38 @@ def test_tasks_without_operations_do_not_call_the_model(tmp_path, runner_id):
         assert runner.calls == [("start",), ("checks", None)]
         assert result["observations"]["mapping_id"] is None
     assert model.history == []
+
+
+class RejectingRunner(FakeRunner):
+    """Rejects the first candidate before any HTTP request, like the real runner's semantic check."""
+
+    def __init__(self, outcomes=()):
+        super().__init__(outcomes)
+        self.rejected = False
+
+    def probe_mapping(self, candidate, documented_operations=None):
+        if not self.rejected:
+            self.rejected = True
+            self.calls.append(("rejected", candidate))
+            raise agent.ToolError("invalid_arguments", "candidate rejected before probing: unknown template variables")
+        return super().probe_mapping(candidate, documented_operations)
+
+
+def test_candidate_rejected_before_probing_uses_no_probe_budget(tmp_path):
+    task = example("task")
+    candidate = example("mapping.correct")["operations"]
+    runner = RejectingRunner([SequenceResult(False), SequenceResult(True)])
+    model = ScriptedModel(
+        ModelTurn([call("start_submission", {}), probe(candidate, call_id="rejected-probe")]),
+        ModelTurn([probe(candidate, call_id="first-probe"), probe(candidate, call_id="second-probe")]),
+        ModelTurn(content="done"),
+    )
+
+    result = agent.orchestrate(task, tmp_path, runner, model)
+
+    rejected = tool_results(model.history[1])["rejected-probe"]["error"]
+    assert rejected["code"] == "invalid_arguments"
+    assert "unknown template variables" in rejected["message"]
+    assert tool_results(model.history[2])["second-probe"]["status"] == "verified"
+    assert result["mapping_status"] == "verified"
+    assert result["probe_attempts"] == 2

@@ -5,9 +5,10 @@
 ## 실행
 
 ```bash
-docker compose up --build
+docker compose -f compose.yaml -f compose.local.yaml up --build
 ```
 
+- `compose.local.yaml`: 로컬용 PostgreSQL과 포트 공개
 - 포트: 8080
 - DB: `DATABASE_URL` 환경 변수. 시작할 때 테이블을 만듭니다.
 - 상태 확인: `GET /health`
