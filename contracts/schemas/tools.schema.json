@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/neru-33/raccOOn/contracts/v1/tools.schema.json",
+  "title": "모델 도구 인자와 결과",
+  "description": "평가 에이전트와 리뷰 세션이 모델에 제공하는 도구. <이름>_args는 함수 parameters, <이름>_result는 호스트가 돌려주는 결과다. 모든 도구는 실패 시 tool_error를 반환할 수 있다. evaluator.contracts.tool_definitions()가 참조를 펼쳐 모델 API용 함수 정의를 만든다.",
+  "x-tool-sets": {
+    "agent": ["read_source", "start_submission", "probe_mapping", "run_checks"],
+    "review": ["lookup_reference"]
+  },
+  "$defs": {
+    "tool_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["error"],
+      "properties": {
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": {
+              "enum": [
+                "invalid_arguments",
+                "path_denied",
+                "not_found",
+                "budget_exhausted",
+                "not_started",
+                "unknown_mapping",
+                "execution_error"
+              ]
+            },
+            "message": {"type": "string"}
+          }
+        }
+      }
+    },
+
+    "read_source_args": {
+      "description": "제출본 스냅샷 안의 문서·소스 파일을 읽는다. 비밀 파일과 스냅샷 밖 경로는 거부된다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": {
+          "description": "스냅샷 기준 POSIX 상대 경로",
+          "type": "string"
+        }
+      }
+    },
+    "read_source_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "content", "total_lines", "truncated"],
+      "properties": {
+        "path": {"$ref": "common.schema.json#/$defs/relative_path"},
+        "content": {"type": "string"},
+        "total_lines": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean"}
+      }
+    },
+
+    "start_submission_args": {
+      "description": "현재 제출본으로 평가 환경을 기동하고 제출물·의존 서비스·평가 도구의 준비 상태를 확인한다. 실행 중인 제출물에서 얻은 사용법 자료(예: OpenAPI 문서)가 있으면 함께 반환한다.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    },
+    "start_submission_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "discovered", "tools", "error"],
+      "properties": {
+        "status": {"enum": ["ready", "error"]},
+        "discovered": {
+          "description": "실행기가 실행 중인 제출물에서 수집한 사용법 자료. 없으면 빈 배열.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "location", "document", "truncated"],
+            "properties": {
+              "kind": {
+                "description": "자료 종류. http 실행기는 openapi를 사용한다.",
+                "type": "string"
+              },
+              "location": {
+                "description": "자료를 얻은 위치(예: 앱 기준 경로 /openapi.json)",
+                "type": ["string", "null"]
+              },
+              "document": {
+                "description": "자료 본문. 크기 제한을 넘으면 요약하고 truncated=true.",
+                "type": ["object", "string", "null"]
+              },
+              "truncated": {"type": "boolean"}
+            }
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "version", "available"],
+            "properties": {
+              "id": {"type": "string"},
+              "version": {"type": ["string", "null"]},
+              "available": {"type": "boolean"}
+            }
+          }
+        },
+        "error": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["stage", "message"],
+              "properties": {
+                "stage": {"type": "string"},
+                "message": {"type": "string"}
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    "probe_mapping_args": {
+      "description": "논리 동작별 API 호출 후보를 제출한다. 실행기가 시험용 데이터로 동작을 순서대로 호출해 상태 코드, 응답 필드 해석, 동작 간 ID 연결을 확인하고, 통과하면 mapping_id를 발급한다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate"],
+      "properties": {
+        "candidate": {"$ref": "mapping-candidate.schema.json"}
+      }
+    },
+    "probe_mapping_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "mapping_id",
+        "probe_attempts",
+        "failed_stage",
+        "failed_operation",
+        "http_status",
+        "message",
+        "response_excerpt"
+      ],
+      "properties": {
+        "status": {"enum": ["verified", "failed"]},
+        "mapping_id": {"type": ["string", "null"]},
+        "probe_attempts": {
+          "description": "이번 실행에서 누적된 시험 횟수",
+          "type": "integer",
+          "minimum": 1
+        },
+        "failed_stage": {"$ref": "mapping.schema.json#/$defs/probe_stage"},
+        "failed_operation": {"type": ["string", "null"]},
+        "http_status": {"type": ["integer", "null"]},
+        "message": {"type": ["string", "null"]},
+        "response_excerpt": {
+          "description": "실패한 응답 본문 앞부분(최대 2,000자)",
+          "type": ["string", "null"]
+        }
+      }
+    },
+
+    "run_checks_args": {
+      "description": "확인된 매핑으로 과제에 선언된 필수 검사를 모두 실행한다. 호출 후 관제 세션은 종료된다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mapping_id"],
+      "properties": {
+        "mapping_id": {
+          "description": "probe_mapping이 발급한 ID. 과제에 연결할 논리 동작이 없으면 null.",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "run_checks_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "observation_count", "error"],
+      "properties": {
+        "status": {"enum": ["complete", "execution_error"]},
+        "observation_count": {"type": "integer", "minimum": 0},
+        "error": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["stage", "message"],
+              "properties": {
+                "stage": {"type": "string"},
+                "message": {"type": "string"}
+              }
+            }
+          ]
+        }
+      }
+    },
+
+    "lookup_reference_args": {
+      "description": "출제자가 등록한 공식 문서 카탈로그에서 지정한 절의 본문을 읽는다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference_id"],
+      "properties": {
+        "reference_id": {"type": "string"}
+      }
+    },
+    "lookup_reference_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "technology", "version", "section_title", "url", "text"],
+      "properties": {
+        "id": {"type": "string"},
+        "technology": {"type": "string"},
+        "version": {"type": "string"},
+        "section_title": {"type": "string"},
+        "url": {"type": "string"},
+        "text": {"type": "string"}
+      }
+    }
+  }
+}

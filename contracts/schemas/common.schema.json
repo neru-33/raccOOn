@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/neru-33/raccOOn/contracts/v1/common.schema.json",
+  "title": "공통 정의",
+  "$defs": {
+    "schema_version": {
+      "const": 1
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "envelope": {
+      "description": "모든 실행 산출물이 갖는 공통 봉투. 값이 다르면 같은 실행의 자료로 병합하지 않는다.",
+      "type": "object",
+      "required": ["schema_version", "run_id", "task_id", "submission_sha256"],
+      "properties": {
+        "schema_version": {"$ref": "#/$defs/schema_version"},
+        "run_id": {"$ref": "#/$defs/identifier"},
+        "task_id": {"$ref": "#/$defs/identifier"},
+        "submission_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "relative_path": {
+      "description": "제출본 스냅샷 기준 POSIX 상대 경로",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$))[^\\\\]+$"
+    },
+    "file_ref": {
+      "description": "제출 파일의 줄 범위. 1부터 세며 양 끝을 포함한다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "start_line", "end_line"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relative_path"},
+        "start_line": {"type": "integer", "minimum": 1},
+        "end_line": {"type": "integer", "minimum": 1}
+      }
+    },
+    "openapi_ref": {
+      "description": "실행 중인 앱의 OpenAPI 문서 안 위치(RFC 6901 JSON Pointer)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["openapi_pointer"],
+      "properties": {
+        "openapi_pointer": {"type": "string", "pattern": "^/"}
+      }
+    },
+    "source_ref": {
+      "oneOf": [
+        {"$ref": "#/$defs/file_ref"},
+        {"$ref": "#/$defs/openapi_ref"}
+      ]
+    },
+    "metric_type": {
+      "description": "int: 정수(건수 등). number: 실수 허용(지연 시간, 비율 등). bool: 불리언.",
+      "enum": ["int", "number", "bool"]
+    },
+    "metric_value": {
+      "description": "관찰값은 숫자 또는 불리언만 허용한다. 문자열 숫자와 불리언-숫자 변환은 허용하지 않는다. 선언 타입과의 일치는 코어가 확인한다.",
+      "type": ["number", "boolean"]
+    },
+    "comparison_op": {
+      "description": "bool 지표에는 eq, ne만 쓸 수 있다.",
+      "enum": ["eq", "ne", "gt", "gte", "lt", "lte"]
+    },
+    "metric_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "test_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+    },
+    "operation_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "op", "value"],
+      "properties": {
+        "metric": {"$ref": "#/$defs/metric_name"},
+        "op": {"$ref": "#/$defs/comparison_op"},
+        "value": {"$ref": "#/$defs/metric_value"}
+      }
+    },
+    "conditions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/condition"}
+    },
+    "observation_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["test_id", "round", "metrics"],
+      "properties": {
+        "test_id": {"$ref": "#/$defs/test_id"},
+        "round": {"type": "integer", "minimum": 1},
+        "metrics": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/metric_name"},
+          "additionalProperties": {"$ref": "#/$defs/metric_value"}
+        }
+      }
+    },
+    "observation_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["test_id", "round", "metric"],
+      "properties": {
+        "test_id": {"$ref": "#/$defs/test_id"},
+        "round": {"type": "integer", "minimum": 1},
+        "metric": {"$ref": "#/$defs/metric_name"}
+      }
+    },
+    "rating": {
+      "enum": ["needs_improvement", "meets", "strong", "insufficient_evidence", "not_applicable"]
+    },
+    "reference_summary": {
+      "description": "호스트가 제공한 공식 문서의 메타데이터(본문 제외)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "technology", "version", "section_title", "url"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "technology": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "section_title": {"type": "string", "minLength": 1},
+        "url": {"type": "string", "pattern": "^https?://"}
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"$ref": "#/$defs/error_code"},
+        "stage": {"type": ["string", "null"]},
+        "message": {"type": "string"}
+      }
+    },
+    "error_code": {
+      "enum": [
+        "contract_error",
+        "mapping_unresolved",
+        "agent_unavailable",
+        "execution_error",
+        "invalid_observations",
+        "review_unavailable",
+        "review_invalid_output"
+      ]
+    },
+    "mapping_status": {
+      "description": "not_required: 과제에 논리 동작이 없어 매핑 단계를 건너뜀.",
+      "enum": ["verified", "mapping_unresolved", "agent_unavailable", "not_reached", "not_required"]
+    },
+    "review_status": {
+      "enum": ["ok", "invalid_output", "unavailable", "off", "skipped"]
+    },
+    "model_info": {
+      "description": "평가에 사용한 모델 연결 정보. API 키는 기록하지 않는다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client", "endpoint_host", "model"],
+      "properties": {
+        "client": {"type": "string", "minLength": 1},
+        "endpoint_host": {"type": ["string", "null"]},
+        "model": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

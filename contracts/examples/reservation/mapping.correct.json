@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "run_id": "run-20261127T140000Z-a1b2c3",
+  "task_id": "reservation-v1",
+  "submission_sha256": "15a596e3c98c407e043751ff3b21ff0358a1bdfdf3fe948b1523893a8e5de2e8",
+  "mapping_id": "map-1",
+  "documented_operations": {
+    "create_reservation": {
+      "protocol": "http",
+      "method": "POST",
+      "path_template": "/reservations",
+      "body_template": {"eventId": "{event_id}", "userId": "{user_id}"},
+      "source_ref": {"path": "README.md", "start_line": 18, "end_line": 27},
+      "probe_status": "verified"
+    },
+    "get_reservation": {
+      "protocol": "http",
+      "method": "GET",
+      "path_template": "/reservations/{reservation_id}",
+      "source_ref": {"path": "README.md", "start_line": 29, "end_line": 36},
+      "probe_status": "verified"
+    }
+  },
+  "operations": {
+    "create_reservation": {
+      "protocol": "http",
+      "method": "POST",
+      "path_template": "/reservations",
+      "query_template": {},
+      "body_template": {"eventId": "{event_id}", "userId": "{user_id}"},
+      "success_codes": [201],
+      "response_fields": {
+        "reservation_id": {"pointer": "/id"},
+        "confirmed": {"pointer": "/status", "equals": "CONFIRMED"}
+      },
+      "source_ref": {"path": "README.md", "start_line": 18, "end_line": 27}
+    },
+    "get_reservation": {
+      "protocol": "http",
+      "method": "GET",
+      "path_template": "/reservations/{reservation_id}",
+      "query_template": {},
+      "body_template": null,
+      "success_codes": [200],
+      "response_fields": {
+        "reservation_id": {"pointer": "/id"},
+        "confirmed": {"pointer": "/status", "equals": "CONFIRMED"}
+      },
+      "source_ref": {"path": "README.md", "start_line": 29, "end_line": 36}
+    }
+  },
+  "probe_attempts": 1,
+  "probe_history": [
+    {
+      "attempt": 1,
+      "candidate": {
+        "create_reservation": {
+          "protocol": "http",
+          "method": "POST",
+          "path_template": "/reservations",
+          "query_template": {},
+          "body_template": {"eventId": "{event_id}", "userId": "{user_id}"},
+          "success_codes": [201],
+          "response_fields": {
+            "reservation_id": {"pointer": "/id"},
+            "confirmed": {"pointer": "/status", "equals": "CONFIRMED"}
+          },
+          "source_ref": {"path": "README.md", "start_line": 18, "end_line": 27}
+        },
+        "get_reservation": {
+          "protocol": "http",
+          "method": "GET",
+          "path_template": "/reservations/{reservation_id}",
+          "query_template": {},
+          "body_template": null,
+          "success_codes": [200],
+          "response_fields": {
+            "reservation_id": {"pointer": "/id"},
+            "confirmed": {"pointer": "/status", "equals": "CONFIRMED"}
+          },
+          "source_ref": {"path": "README.md", "start_line": 29, "end_line": 36}
+        }
+      },
+      "result": "verified",
+      "failed_stage": null,
+      "failed_operation": null,
+      "http_status": null,
+      "message": null,
+      "mapping_id": "map-1"
+    }
+  ]
+}

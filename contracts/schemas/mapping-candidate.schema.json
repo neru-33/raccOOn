@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/neru-33/raccOOn/contracts/v1/mapping-candidate.schema.json",
+  "title": "매핑 후보",
+  "description": "논리 동작 이름을 키로, 제출물의 호출법을 값으로 갖는다. task.json.operations의 모든 동작을 포함해야 한다. 호출법은 protocol로 구분하며 v1은 http만 정의한다.",
+  "type": "object",
+  "minProperties": 1,
+  "propertyNames": {"$ref": "common.schema.json#/$defs/operation_name"},
+  "additionalProperties": {"$ref": "#/$defs/operation_call"},
+  "$defs": {
+    "template_value": {
+      "description": "JSON 값. 문자열 값 전체가 \"{변수}\"이면 변수의 원래 타입으로 치환하고, 문자열 일부에 쓰이면 문자열로 치환한다.",
+      "type": ["string", "number", "integer", "boolean", "null", "object", "array"]
+    },
+    "operation_call": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "method",
+        "path_template",
+        "query_template",
+        "body_template",
+        "success_codes",
+        "response_fields",
+        "source_ref"
+      ],
+      "properties": {
+        "protocol": {
+          "description": "호출 방식. 실행기는 지원하는 protocol만 받는다.",
+          "const": "http"
+        },
+        "method": {"enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
+        "path_template": {
+          "description": "앱 기준 상대 경로. 경로 변수는 {이름}으로 쓰고 URL 인코딩한다. 스킴·호스트는 쓸 수 없다.",
+          "type": "string",
+          "pattern": "^/(?!/)[^\\s?#]*$"
+        },
+        "query_template": {
+          "type": "object",
+          "additionalProperties": {"type": ["string", "number", "integer", "boolean"]}
+        },
+        "headers_template": {
+          "description": "요청 헤더 템플릿(선택)",
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        },
+        "body_template": {
+          "description": "JSON 본문 템플릿. 본문이 없으면 null.",
+          "type": ["object", "array", "null"]
+        },
+        "success_codes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 100, "maximum": 599}
+        },
+        "response_fields": {
+          "description": "키는 task.json의 해당 동작 outputs 이름. pointer는 응답 본문 기준 RFC 6901 JSON Pointer.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"$ref": "common.schema.json#/$defs/operation_name"},
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pointer"],
+            "properties": {
+              "pointer": {"type": "string", "pattern": "^(/.*)?$"},
+              "equals": {
+                "description": "bool 출력에 사용. 값이 equals와 같으면 true, 아니면 false. 생략하면 응답 값이 불리언이어야 한다.",
+                "type": ["string", "number", "integer", "boolean", "null"]
+              }
+            }
+          }
+        },
+        "source_ref": {"$ref": "common.schema.json#/$defs/source_ref"}
+      }
+    }
+  }
+}

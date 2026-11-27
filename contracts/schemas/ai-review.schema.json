@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/neru-33/raccOOn/contracts/v1/ai-review.schema.json",
+  "title": "리뷰 산출물 ai_review.json",
+  "description": "리뷰 모듈이 작성한다. 모델 응답이 ai-review-model-output 스키마를 통과하고 봉투가 현재 실행과 일치할 때만 생성된다.",
+  "type": "object",
+  "allOf": [{"$ref": "common.schema.json#/$defs/envelope"}],
+  "required": ["model_info", "retrieved_references", "quality_findings", "hypotheses"],
+  "properties": {
+    "schema_version": true,
+    "run_id": true,
+    "task_id": true,
+    "submission_sha256": true,
+    "model_info": {"$ref": "common.schema.json#/$defs/model_info"},
+    "retrieved_references": {
+      "description": "이번 리뷰 세션에서 lookup_reference가 실제로 반환한 문서. 호스트가 기록한다.",
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/reference_summary"}
+    },
+    "quality_findings": {
+      "type": "array",
+      "items": {"$ref": "ai-review-model-output.schema.json#/$defs/quality_finding"}
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {"$ref": "ai-review-model-output.schema.json#/$defs/hypothesis"}
+    }
+  },
+  "unevaluatedProperties": false
+}

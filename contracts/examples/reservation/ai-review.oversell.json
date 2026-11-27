@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "run_id": "run-20261127T141500Z-d4e5f6",
+  "task_id": "reservation-v1",
+  "submission_sha256": "926026e2e9bcafa1327dfe1833da7000fa21e7b3f3f9817be0df01497cd834f4",
+  "model_info": {
+    "client": "openai-compatible",
+    "endpoint_host": "api.openai.com",
+    "model": "example-model"
+  },
+  "retrieved_references": [
+    {
+      "id": "pg16-transaction-iso",
+      "technology": "PostgreSQL",
+      "version": "16",
+      "section_title": "13.2. Transaction Isolation",
+      "url": "https://www.postgresql.org/docs/16/transaction-iso.html"
+    },
+    {
+      "id": "pg16-explicit-locking",
+      "technology": "PostgreSQL",
+      "version": "16",
+      "section_title": "13.3. Explicit Locking",
+      "url": "https://www.postgresql.org/docs/16/explicit-locking.html"
+    }
+  ],
+  "quality_findings": [
+    {
+      "criterion_id": "architecture",
+      "rating": "needs_improvement",
+      "reason": "남은 좌석 확인과 예약 저장이 서비스 함수 안에서 별도 쿼리로 실행되고, 정원 규칙을 보장하는 저장 계층의 제약이나 잠금이 없다. 동시성 검사 2회차에서 확정 저장 2건이 관측되었다.",
+      "source_refs": [
+        {"path": "src/enrollments/service.py", "start_line": 21, "end_line": 38}
+      ],
+      "observation_refs": [
+        {"test_id": "reservation.concurrent", "round": 2, "metric": "persisted_confirmed"}
+      ],
+      "reference_ids": ["pg16-transaction-iso"],
+      "feature_summary": null
+    },
+    {
+      "criterion_id": "code_quality",
+      "rating": "needs_improvement",
+      "reason": "정상 흐름은 읽히지만 정원 초과와 중복 예약 같은 경계 조건을 다루는 테스트가 없다.",
+      "source_refs": [
+        {"path": "tests/test_enrollments.py", "start_line": 1, "end_line": 30}
+      ],
+      "observation_refs": [],
+      "reference_ids": [],
+      "feature_summary": null
+    },
+    {
+      "criterion_id": "documentation",
+      "rating": "needs_improvement",
+      "reason": "README의 예약 생성 예시 POST /reserve가 시험에서 404로 끝났고, 실제 동작한 경로는 OpenAPI에 있는 POST /enrollments였다.",
+      "source_refs": [
+        {"path": "README.md", "start_line": 12, "end_line": 22}
+      ],
+      "observation_refs": [],
+      "reference_ids": [],
+      "feature_summary": null
+    },
+    {
+      "criterion_id": "extra_feature",
+      "rating": "not_applicable",
+      "reason": "필수 범위를 넘는 기능을 코드와 문서에서 식별하지 못했다.",
+      "source_refs": [],
+      "observation_refs": [],
+      "reference_ids": [],
+      "feature_summary": null
+    }
+  ],
+  "hypotheses": [
+    {
+      "id": "h1",
+      "text": "남은 좌석 조회와 예약 INSERT가 기본 격리 수준(READ COMMITTED) 트랜잭션에서 행 잠금 없이 실행되어, 동시 요청들이 같은 남은 좌석 수를 읽고 각각 확정했을 수 있다.",
+      "source_ref": {"path": "src/enrollments/service.py", "start_line": 24, "end_line": 33},
+      "reference_ids": ["pg16-transaction-iso", "pg16-explicit-locking"]
+    }
+  ]
+}

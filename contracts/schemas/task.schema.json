@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/neru-33/raccOOn/contracts/v1/task.schema.json",
+  "title": "과제 설정 task.json",
+  "description": "출제자가 작성하는 평가 입력. 엔진은 --task로 이 파일을 받는다. 상대 경로는 task.json이 있는 디렉터리를 기준으로 해석한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "task_summary",
+    "runner_id",
+    "runner_config",
+    "operations",
+    "metrics",
+    "rules",
+    "score_limits",
+    "quality_rubric",
+    "review_instructions"
+  ],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schema_version"},
+    "task_id": {"$ref": "common.schema.json#/$defs/identifier"},
+    "task_summary": {
+      "description": "평가 에이전트와 리뷰 세션에 제공하는 과제 요약",
+      "type": "string",
+      "minLength": 1
+    },
+    "runner_id": {
+      "description": "엔진에 등록된 실행기 ID. 실행 검사 없이 리뷰만 하는 과제는 null이며, 이때 operations·metrics·rules는 비어 있고 기능 만점은 0이어야 한다.",
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "common.schema.json#/$defs/identifier"}
+      ]
+    },
+    "runner_config": {"$ref": "#/$defs/runner_config"},
+    "operations": {
+      "description": "평가 에이전트가 제출물에서 찾아 연결해야 할 논리 동작. 비어 있으면 매핑 단계를 건너뛴다(mapping_status: not_required).",
+      "type": "object",
+      "propertyNames": {"$ref": "common.schema.json#/$defs/operation_name"},
+      "additionalProperties": {"$ref": "#/$defs/operation"}
+    },
+    "metrics": {
+      "description": "검사 ID별 회차와 지표 타입 선언. 실행 기록은 선언된 모든 회차·지표를 채워야 한다.",
+      "type": "object",
+      "propertyNames": {"$ref": "common.schema.json#/$defs/test_id"},
+      "additionalProperties": {"$ref": "#/$defs/metric_declaration"}
+    },
+    "rules": {
+      "description": "기능 배점 규칙. 기능 만점은 각 규칙의 최대 배점 합과 일치해야 한다.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/rule"}
+    },
+    "score_limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["functional", "quality"],
+      "properties": {
+        "functional": {"type": "integer", "minimum": 0},
+        "quality": {"type": "integer", "minimum": 0}
+      }
+    },
+    "quality_rubric": {
+      "description": "품질 항목. 품질 만점은 각 항목 max_points 합과 일치해야 한다.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/quality_criterion"}
+    },
+    "review_instructions": {
+      "description": "출제자가 작성한 품질 평가 지침",
+      "type": "string",
+      "minLength": 1
+    },
+    "review_reference_catalog": {
+      "description": "공식 문서 카탈로그 파일 경로. --review live에서는 필수.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "runner_config": {
+      "description": "실행기별 설정. database와 tools는 쓰는 경우 아래 형식을 따르고, 나머지 키는 runner_id에 해당하는 실행기가 검증한다.",
+      "type": "object",
+      "properties": {
+        "database": {
+          "description": "DB가 필요한 과제에서만 지정한다.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": {"enum": ["engine_managed", "external"]},
+            "url_env": {
+              "description": "external 모드에서 접속 정보를 읽을 환경 변수 이름",
+              "type": "string",
+              "pattern": "^[A-Z_][A-Z0-9_]*$"
+            }
+          },
+          "if": {"properties": {"mode": {"const": "external"}}},
+          "then": {"required": ["url_env"]}
+        },
+        "tools": {
+          "description": "필수 평가 도구 선언",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": {"$ref": "common.schema.json#/$defs/identifier"},
+              "version": {"type": "string"},
+              "image": {"type": "string"},
+              "options": {"type": "object"}
+            }
+          }
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "inputs", "outputs"],
+      "properties": {
+        "description": {"type": "string", "minLength": 1},
+        "inputs": {
+          "description": "요청 템플릿에서 {이름}으로 쓸 수 있는 변수",
+          "type": "object",
+          "propertyNames": {"$ref": "common.schema.json#/$defs/operation_name"},
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "description"],
+            "properties": {
+              "type": {"enum": ["id", "string", "integer", "number", "boolean"]},
+              "description": {"type": "string"},
+              "from": {
+                "description": "다른 동작의 출력을 입력으로 연결. 형식: <operation>.<output>",
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+              }
+            }
+          }
+        },
+        "outputs": {
+          "description": "응답에서 읽어야 할 의미. 매핑 후보의 response_fields 키와 일치해야 한다.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"$ref": "common.schema.json#/$defs/operation_name"},
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "description"],
+            "properties": {
+              "type": {
+                "description": "id: 비어 있지 않은 문자열 또는 정수. bool: 불리언 값이거나 equals 비교 결과.",
+                "enum": ["id", "bool", "string", "integer", "number"]
+              },
+              "description": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "metric_declaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rounds", "values"],
+      "properties": {
+        "rounds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "values": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"$ref": "common.schema.json#/$defs/metric_name"},
+          "additionalProperties": {"$ref": "common.schema.json#/$defs/metric_type"}
+        }
+      }
+    },
+    "rule": {
+      "oneOf": [
+        {"$ref": "#/$defs/rule_award_if"},
+        {"$ref": "#/$defs/rule_award_per_round"}
+      ]
+    },
+    "rule_award_if": {
+      "description": "지정한 회차 행의 조건을 모두 만족하면 points를 부여한다.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "test_id", "round", "points", "conditions"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/identifier"},
+        "type": {"const": "award_if"},
+        "description": {"type": "string"},
+        "test_id": {"$ref": "common.schema.json#/$defs/test_id"},
+        "round": {"type": "integer", "minimum": 1},
+        "points": {"type": "integer", "minimum": 0},
+        "conditions": {"$ref": "common.schema.json#/$defs/conditions"}
+      }
+    },
+    "rule_award_per_round": {
+      "description": "veto_if_any_round를 먼저 평가해 어느 회차든 조건을 모두 만족하면 0점. 그렇지 않으면 선언된 회차마다 conditions를 모두 만족할 때 points를 부여한다. 최대 배점은 points × 회차 수.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "test_id", "points", "conditions"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/identifier"},
+        "type": {"const": "award_per_round"},
+        "description": {"type": "string"},
+        "test_id": {"$ref": "common.schema.json#/$defs/test_id"},
+        "points": {"type": "integer", "minimum": 0},
+        "conditions": {"$ref": "common.schema.json#/$defs/conditions"},
+        "veto_if_any_round": {"$ref": "common.schema.json#/$defs/conditions"}
+      }
+    },
+    "quality_criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "kind", "levels", "max_points", "points_by_rating"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/identifier"},
+        "title": {"type": "string", "minLength": 1},
+        "kind": {
+          "description": "extra_feature 항목은 feature_summary와 verification_level을 기록한다.",
+          "enum": ["general", "extra_feature"]
+        },
+        "levels": {
+          "description": "판정별 기준 설명",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["needs_improvement", "meets", "strong"],
+          "properties": {
+            "needs_improvement": {"type": "string"},
+            "meets": {"type": "string"},
+            "strong": {"type": "string"}
+          }
+        },
+        "max_points": {"type": "integer", "minimum": 0},
+        "points_by_rating": {
+          "description": "판정별 배점. not_applicable 키가 있는 항목만 해당 없음 판정을 받을 수 있다. insufficient_evidence는 배점하지 않고 보류한다.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["needs_improvement", "meets", "strong"],
+          "properties": {
+            "needs_improvement": {"type": "integer", "minimum": 0},
+            "meets": {"type": "integer", "minimum": 0},
+            "strong": {"type": "integer", "minimum": 0},
+            "not_applicable": {"type": "integer", "minimum": 0}
+          }
+        },
+        "verification_rules": {
+          "description": "extra_feature 항목의 실행 확인 조건. 하나라도 만족하면 runtime_verified.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["test_id", "round", "conditions"],
+            "properties": {
+              "test_id": {"$ref": "common.schema.json#/$defs/test_id"},
+              "round": {"type": "integer", "minimum": 1},
+              "conditions": {"$ref": "common.schema.json#/$defs/conditions"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "run_id": "run-20261127T143000Z-0a9b8c",
+  "task_id": "reservation-v1",
+  "submission_sha256": "27a888c9d5e6c6c2d1530d15680651f4eefc9a98aaba319953362e3cf5a24996",
+  "run_status": "incomplete",
+  "mapping_status": "mapping_unresolved",
+  "mapping_id": null,
+  "probe_attempts": 2,
+  "calls": {
+    "documented_operations": {
+      "create_reservation": {
+        "protocol": "http",
+        "method": "POST",
+        "path_template": "/bookings",
+        "body_template": {"event": "{event_id}", "user": "{user_id}"},
+        "source_ref": {"path": "README.md", "start_line": 10, "end_line": 16},
+        "probe_status": "failed"
+      }
+    },
+    "operations": {}
+  },
+  "base_score": null,
+  "max_score": 40,
+  "rule_results": [],
+  "quality_score": null,
+  "quality_max_score": 60,
+  "quality_results": [],
+  "total_score": null,
+  "total_max_score": 100,
+  "review_status": "skipped",
+  "review_result": {
+    "status": "skipped",
+    "review_artifact": null,
+    "error": null
+  },
+  "hypothesis_results": [],
+  "model_info": {
+    "client": "openai-compatible",
+    "endpoint_host": "api.openai.com",
+    "model": "example-model"
+  },
+  "errors": [
+    {
+      "code": "mapping_unresolved",
+      "stage": "probe_mapping",
+      "message": "매핑 시험 예산 2회 안에 생성·조회 ID 연결을 확인하지 못했다."
+    }
+  ]
+}
