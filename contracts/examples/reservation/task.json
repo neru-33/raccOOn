@@ -15,7 +15,14 @@
       "compose_file": "compose.yaml",
       "service": "app",
       "port": 8080,
-      "ready_timeout_seconds": 60
+      "ready_timeout_seconds": 60,
+      "env": [
+        {
+          "name": "DATABASE_URL",
+          "format": "postgresql://<user>:<password>@<host>:<port>/<database>",
+          "description": "평가 환경이 제공하는 테스트 DB 접속 정보"
+        }
+      ]
     },
     "probe": {
       "event_capacity": 5

@@ -130,15 +130,21 @@
       "properties": {
         "code": {"$ref": "#/$defs/error_code"},
         "stage": {"type": ["string", "null"]},
-        "message": {"type": "string"}
+        "message": {"type": "string"},
+        "log_excerpt": {
+          "description": "원인 확인에 필요한 로그 발췌(선택). 비밀값은 넣지 않는다.",
+          "type": ["string", "null"]
+        }
       }
     },
     "error_code": {
+      "description": "execution_error: 평가 환경(실행기·컨테이너·DB·평가 도구) 문제. submission_start_failed: 평가 환경은 정상인데 제출물이 기동·준비되지 않음. 두 경우 모두 점수는 보류한다.",
       "enum": [
         "contract_error",
         "mapping_unresolved",
         "agent_unavailable",
         "execution_error",
+        "submission_start_failed",
         "invalid_observations",
         "review_unavailable",
         "review_invalid_output"

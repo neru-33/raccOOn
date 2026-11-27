@@ -24,9 +24,10 @@ task.json ─┐
 
 | 모듈 | 책임 | 하지 않는 일 |
 | --- | --- | --- |
-| `cli` | 입력 검증, 스냅샷 생성, `run_meta` 발급, 모듈 호출 순서 관리, 실행 리소스 정리 | 채점, 모델 호출 |
-| `agent` | 모델과 함께 제출물의 사용법을 찾고 실행기 도구를 호출 | 관찰값 작성, 점수 지정 |
-| `runners` | 제출물 기동, 매핑 후보 시험, 검사 실행, 관찰값 기록, 정리 | 점수 계산, 품질 판단 |
+| `cli` | 입력 검증, `run_meta` 발급, 모듈 호출 순서 관리, 실행 리소스 정리 | 채점, 모델 호출 |
+| `snapshot` | 제출본 복사와 스냅샷 ID 계산, `read_source` 도구(스냅샷 밖·비밀 파일 차단) | 제출물 실행 |
+| `agent` | 모델과 함께 제출물의 사용법을 찾고 도구를 호출. 문서에 적힌 호출법을 실행기에 전달 | 관찰값 작성, 점수 지정 |
+| `runners` | 실행 규약대로 제출물 기동, 매핑 후보 시험, 검사 실행, 관찰값·매핑 기록, 정리 | 점수 계산, 품질 판단, 제출물 문서 해석 |
 | `models` | `ModelClient` 인터페이스로 모델 제공자 연결 | 평가 규칙 적용 |
 | `review` | 독립 세션에서 루브릭 판정과 근거 참조를 구조화해 반환 | 점수 계산, 검사 실행 |
 | `core` | 산출물 검증, 배점 규칙 적용, 리뷰 근거 확인, 리포트 객체 생성 | 외부 실행, 모델 호출 |
@@ -78,7 +79,8 @@ v1 안에서 값이나 정의를 추가할 수 있다. 기존 값의 이름이�
 | 지표 타입 | `common.schema.json#/$defs/metric_type` | `int`, `number`, `bool` |
 | 비교 연산 | `common.schema.json#/$defs/comparison_op` | `eq`, `ne`, `gt`, `gte`, `lt`, `lte` |
 | 배점 규칙 종류 | `task.schema.json#/$defs/rule` | `award_if`, `award_per_round` |
-| 오류 코드 | `common.schema.json#/$defs/error_code` | 7종 |
+| 오류 코드 | `common.schema.json#/$defs/error_code` | 8종 |
+| 제출물 실행 규약 | `runner_config.app` (`env` 포함) | 기동 방식, 포트, 주입 환경 변수의 이름·형식 |
 | 매핑 실패 단계 | `mapping.schema.json#/$defs/probe_stage` | 6종 |
 | 모델 도구 | `tools.schema.json` | 에이전트 4종. 리뷰 세션은 도구 없음 |
 | 실행기 설정 | `task.schema.json#/$defs/runner_config` | 공통 `database`, `tools`. 나머지 키는 실행기 소유 |
@@ -106,6 +108,7 @@ v1 안에서 값이나 정의를 추가할 수 있다. 기존 값의 이름이�
 | 새 모델 도구 | `tools.schema.json`에 `<이름>_args`와 `<이름>_result`를 정의하고 `x-tool-sets`의 해당 세션에 등록한다. 도구가 반환한 자료를 근거로 인용하게 하려면 코어의 근거 확인도 함께 확장한다 |
 | 새 모델 제공자 | OpenAI 호환 엔드포인트면 `EVALUATOR_BASE_URL`만 지정한다. 그 밖의 경우 `ModelClient`를 구현해 `EVALUATOR_MODEL_CLIENT`로 지정한다 |
 | 실행 검사 없는 과제 | `runner_id: null`, 빈 `operations`·`metrics`·`rules`, 기능 만점 0으로 작성한다 |
+| 제출물에 주입할 값 | `runner_config.app.env`에 이름·형식·설명을 선언하고 문제지에 같은 내용을 안내한다. 실행기가 실행마다 값을 만들어 주입한다 |
 
 회차 합계, 최댓값, 백분위 같은 집계는 실행기가 지표로 계산해 기록한다. 코어는 집계 연산을 갖지 않는다.
 
