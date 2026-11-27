@@ -10,6 +10,8 @@
 docker compose up --build
 ```
 
+소스만 제출할 때는 루트 `main.py`가 FastAPI 진입점이며 `requirements.txt`에 의존성이 선언되어 있습니다.
+
 앱은 8080 포트에서 동작하며, `GET /health`가 DB 연결을 확인해 200을 돌려줍니다.
 
 ## API

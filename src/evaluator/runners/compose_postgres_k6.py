@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from evaluator.runners import compose as dc
+from evaluator.runners.build import AppBuild, BuildError, prepare_app
 from evaluator.runners.k6 import SummaryError, build_script, parse_summary
 from evaluator.runners.probe import ProbeLog, SequenceResult, UrllibTransport, run_sequence, validate_candidate
 from evaluator.runners.templates import TemplateError, render_request
@@ -101,6 +102,7 @@ class ComposePostgresK6Runner:
             compose_file=self.snapshot_dir / app["compose_file"],
             override_file=self._workdir / "compose.override.json",
         )
+        self._build: AppBuild | None = None
         self._base_url: str | None = None
         self._db_version: str | None = None
         self._started = False
@@ -215,8 +217,13 @@ class ComposePostgresK6Runner:
             dc.docker_available()
         except dc.CommandError as err:
             raise _StartFailure("docker", "environment", f"docker is not available: {err}") from err
-        if not self.project.compose_file.is_file():
-            raise _StartFailure("compose_file", "submission", f"compose file not found: {self.config['app']['compose_file']}")
+        if self._build is None:
+            try:
+                self._build = prepare_app(self.snapshot_dir, self.project.compose_file, self.app_service, self._workdir)
+            except BuildError as err:
+                raise _StartFailure("app_build", err.cause, str(err), err.log) from err
+            self.project.compose_file = self._build.compose_file
+            self.project.project_dir = self._build.project_dir
         for image in (self.db_image, self.k6_tool["image"]):
             try:
                 dc.ensure_image(image)
@@ -242,7 +249,7 @@ class ComposePostgresK6Runner:
         except dc.CommandError as err:
             raise _StartFailure("database", "environment", "database did not become ready", err.output) from err
         try:
-            self.project.up(self.app_service, build=True, no_deps=True, timeout=900)
+            self.project.up(self.app_service, build=self._build.mode != "auto", no_deps=True, timeout=900)
             host, port = self.project.port(self.app_service, self.app_port)
         except dc.CommandError as err:
             log = err.output + "\n" + self.project.logs(self.app_service)
@@ -370,6 +377,7 @@ class ComposePostgresK6Runner:
 
     def run_checks(self, mapping_id: str | None) -> dict[str, Any]:
         self._require_started()
+        assert self._build is not None
         operations = self.task.get("operations") or {}
         if operations and (mapping_id is None or mapping_id != self._log.verified_id):
             raise ToolError("unknown_mapping", f"mapping {mapping_id!r} was not verified in this run")
@@ -402,6 +410,7 @@ class ComposePostgresK6Runner:
             "runner_info": {
                 "runner_id": RUNNER_ID,
                 "database_mode": self.config["database"]["mode"],
+                "build_mode": self._build.mode,
                 # The persisted count comes from the submission's own API, not from the database.
                 "count_source": {
                     "kind": "api",
@@ -513,4 +522,6 @@ class ComposePostgresK6Runner:
                 self.project.down()
         except dc.CommandError:
             pass
+        if self._build is not None:
+            self._build.close()
         shutil.rmtree(self._workdir, ignore_errors=True)

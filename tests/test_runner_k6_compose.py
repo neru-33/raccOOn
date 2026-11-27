@@ -48,6 +48,7 @@ def test_override_injects_database_and_publishes_app_port() -> None:
     )
     app = override["services"]["app"]
     assert app["environment"]["DATABASE_URL"] == "postgresql://raccoon:pw@raccoon-db:5432/raccoon"
+    assert app["environment"]["PORT"] == "8080"
     assert app["ports"] == ["127.0.0.1::8080"]
     assert override["services"][compose.DB_SERVICE]["healthcheck"]
     assert override["services"][compose.K6_SERVICE]["profiles"] == ["tools"]

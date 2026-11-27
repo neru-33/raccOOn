@@ -50,6 +50,7 @@
       "properties": {
         "runner_id": {"type": "string"},
         "database_mode": {"enum": ["engine_managed", "external"]},
+        "build_mode": {"enum": ["compose", "dockerfile", "auto"]},
         "tools": {
           "type": "array",
           "items": {
