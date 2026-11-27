@@ -138,7 +138,9 @@ task.json ─┐
 }
 ```
 
-- 제출본의 Compose 파일에는 앱 서비스만 둔다. DB 같은 의존 서비스는 실행기가 자체 덮어쓰기 파일로 붙이고, 접속 정보를 `env`에 선언된 이름으로 주입한다.
+- 실행기는 `app.compose_file`이 있으면 그 파일을 사용한다. Compose 파일에는 앱 서비스만 둔다. 파일이 없고 루트 `Dockerfile`이 있으면 `build: .`인 앱 서비스를 생성한다. 두 파일 모두 없으면 Railpack이 소스의 빌드 및 시작 명령을 판별하고 생성한 이미지로 앱을 실행한다.
+- 세 기동 방식 모두 DB 같은 의존 서비스는 실행기가 덮어쓰기 파일로 붙인다. 접속 정보는 `env`에 선언된 이름으로 주입하고, `PORT`에는 `app.port` 값(예약 과제는 `8080`)을 주입한다.
+- 기동 방식은 `observations.json`의 `runner_info.build_mode`에 `compose`, `dockerfile`, `auto` 중 하나로 남긴다. 자동 빌드 도구·기본 이미지 준비 실패는 `environment`, 스택 판별 실패나 제출물 빌드 실패는 `submission`으로 분류하고 로그 발췌를 남긴다.
 - 준비 확인: 실행기는 `ready_timeout_seconds` 안에 `GET <health_path>`가 200을 돌려주면 제출물이 준비된 것으로 본다.
 - `env`에는 이름, 형식, 설명만 적는다. 실제 값은 실행기가 실행마다 만들어 주입하며 설정 파일, 모델 입력, 리포트에 남기지 않는다.
 - `runner_config.database.url_env`는 방향이 반대다. 운영자가 실행기에 외부 DB 접속 정보를 넘기는 환경 변수 이름이다.

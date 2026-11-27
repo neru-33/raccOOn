@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from evaluator import contracts
-from evaluator.runners import open_session
+from evaluator.runners import compose, open_session
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("RACCOON_DOCKER_TESTS") != "1", reason="set RACCOON_DOCKER_TESTS=1 to run Docker tests"
@@ -97,9 +97,14 @@ CANDIDATES = {
 }
 
 
-def _session(tmp_path: Path, app: str):
+def _session(tmp_path: Path, app: str, build_mode: str = "compose"):
     snapshot = tmp_path / app
-    shutil.copytree(TASK_DIR / "submissions" / app, snapshot, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
+    excluded = ["__pycache__", ".pytest_cache"]
+    if build_mode != "compose":
+        excluded.append("compose.yaml")
+    if build_mode == "auto":
+        excluded.append("Dockerfile")
+    shutil.copytree(TASK_DIR / "submissions" / app, snapshot, ignore=shutil.ignore_patterns(*excluded))
     run_meta = {
         "schema_version": 1,
         "run_id": f"run-example-{app}-{uuid.uuid4().hex[:6]}",
@@ -109,8 +114,8 @@ def _session(tmp_path: Path, app: str):
     return open_session(TASK, TASK_DIR, snapshot, run_meta)
 
 
-def _run(tmp_path: Path, app: str) -> tuple[dict, dict]:
-    session = _session(tmp_path, app)
+def _run(tmp_path: Path, app: str, build_mode: str = "compose") -> tuple[dict, dict]:
+    session = _session(tmp_path, app, build_mode)
     try:
         started = session.start()
         assert started["status"] == "ready", started
@@ -119,18 +124,44 @@ def _run(tmp_path: Path, app: str) -> tuple[dict, dict]:
         obs = session.run_checks(probe["mapping_id"])
     finally:
         session.close()
+    assert obs["status"] == "complete", obs
+    assert obs["runner_info"]["build_mode"] == build_mode
+    contracts.validate("observations.schema.json", obs)
+    if build_mode == "auto":
+        assert session._build and session._build.image
+        images = compose.run_command(["docker", "image", "ls", "--quiet", session._build.image])
+        assert not images.strip()
     rows = {(o["test_id"], o["round"]): o["metrics"] for o in obs["observations"]}
     print(app, json.dumps([rows.get(("reservation.concurrent", r)) for r in (1, 2, 3)]))
     return started, rows
 
 
-@pytest.mark.parametrize("app", ["basic", "robust"])
-def test_correct_apps_confirm_exactly_one(tmp_path: Path, app: str) -> None:
-    started, rows = _run(tmp_path, app)
+@pytest.mark.parametrize(("app", "build_mode"), [
+    ("basic", "compose"), ("basic", "dockerfile"), ("basic", "auto"), ("robust", "compose"),
+])
+def test_correct_apps_confirm_exactly_one(tmp_path: Path, app: str, build_mode: str) -> None:
+    started, rows = _run(tmp_path, app, build_mode)
     assert started["discovered"] and started["discovered"][0]["kind"] == "openapi"
     assert rows[("reservation.functional", 1)] == {"created": True, "retrieved": True}
     for r in (1, 2, 3):
         assert rows[("reservation.concurrent", r)] == {"confirmed_responses": 1, "persisted_confirmed": 1}
+
+
+def test_detecting_an_unsupported_source_fails_as_submission(tmp_path: Path) -> None:
+    snapshot = tmp_path / "unsupported"
+    snapshot.mkdir()
+    (snapshot / "README.md").write_text("An app with no recognizable stack", encoding="utf-8")
+    run_meta = {"schema_version": 1, "run_id": f"run-example-unsupported-{uuid.uuid4().hex[:6]}",
+                "task_id": TASK["task_id"], "submission_sha256": "0" * 64}
+    session = open_session(TASK, TASK_DIR, snapshot, run_meta)
+    try:
+        started = session.start()
+    finally:
+        session.close()
+    assert started["status"] == "error", started
+    assert started["error"]["stage"] == "app_build"
+    assert started["error"]["cause"] == "submission"
+    assert "railpack" in started["error"]["log_excerpt"].lower()
 
 
 def test_local_lock_app_oversells_with_multiple_workers(tmp_path: Path) -> None:

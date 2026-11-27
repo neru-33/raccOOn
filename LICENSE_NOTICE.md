@@ -9,6 +9,7 @@
 | Python | CLI 및 표준 라이브러리 | [PSF License](https://docs.python.org/3/license.html) |
 | OpenAI Python SDK | 모델 API 클라이언트 | [Apache-2.0](https://github.com/openai/openai-python/blob/main/LICENSE) |
 | Docker Compose | 제출 앱과 테스트 DB 기동 | [Apache-2.0](https://github.com/docker/compose/blob/main/LICENSE) |
+| Railpack | Compose 파일과 Dockerfile이 없는 제출물의 빌드 계획 생성 및 BuildKit 프런트엔드 | [MIT](https://github.com/railwayapp/railpack/blob/v0.44.0/LICENSE) |
 | PostgreSQL | 테스트 DB 서버 | [PostgreSQL License](https://www.postgresql.org/about/licence/) |
 | Grafana k6 | 별도 프로세스 또는 컨테이너에서 부하 검사 실행 | [AGPL-3.0](https://github.com/grafana/k6#license) |
 | psycopg, psycopg-pool | 예제 앱(`examples/`)과 실행기 검증용 테스트 앱(`tests/runner_app`) 컨테이너 빌드 시 설치 | [LGPL-3.0](https://github.com/psycopg/psycopg/blob/master/LICENSE.txt) |

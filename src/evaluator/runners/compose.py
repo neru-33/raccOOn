@@ -49,7 +49,7 @@ def build_override(
     return {
         "services": {
             app_service: {
-                "environment": {db_url_env: database_url(db_password)},
+                "environment": {"PORT": str(app_port), db_url_env: database_url(db_password)},
                 "ports": [f"127.0.0.1::{app_port}"],
             },
             DB_SERVICE: {
@@ -114,17 +114,17 @@ class ComposeProject:
     name: str
     compose_file: Path
     override_file: Path
+    project_dir: Path | None = None
 
     @property
     def cwd(self) -> Path:
-        return self.compose_file.parent
+        return self.project_dir if self.project_dir is not None else self.compose_file.parent
 
     def _args(self, *args: str) -> list[str]:
-        return [
-            "docker", "compose", "-p", self.name,
-            "-f", str(self.compose_file), "-f", str(self.override_file),
-            *args,
-        ]
+        command = ["docker", "compose", "-p", self.name]
+        if self.project_dir is not None:
+            command.extend(["--project-directory", str(self.project_dir)])
+        return [*command, "-f", str(self.compose_file), "-f", str(self.override_file), *args]
 
     def run(self, *args: str, input_text: str | None = None, timeout: float = 300) -> str:
         return run_command(self._args(*args), cwd=self.cwd, input_text=input_text, timeout=timeout)

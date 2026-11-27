@@ -6,6 +6,7 @@ Docker Compose로 제출 앱을 띄우고 PostgreSQL을 제공하며, 동시 요
 
 - Docker Engine과 Docker Compose v2
 - 실행 중 내려받거나 사용하는 이미지: `runner_config.tools`의 `postgres`, `k6` 이미지
+- 소스 자동 빌드에는 Linux 컨테이너를 실행하는 Docker와 Docker Buildx가 필요하다. 실행기가 Railpack v0.44.0 이미지와 빌더·런타임 이미지를 준비한다.
 - 파이썬 추가 의존성 없음. HTTP는 표준 라이브러리로 한다.
 
 ## 실행 순서
@@ -13,7 +14,7 @@ Docker Compose로 제출 앱을 띄우고 PostgreSQL을 제공하며, 동시 요
 | 단계 | 동작 | 실패 시 |
 | --- | --- | --- |
 | 1 | Docker 데몬 확인 | `environment` |
-| 2 | 제출본 Compose 파일 확인 | `submission` |
+| 2 | 제출본 기동 방식 선택 및 자동 빌드(필요 시) | 도구·기본 이미지 준비 실패는 `environment`, 스택 판별·제출물 빌드 실패는 `submission` |
 | 3 | 도구 이미지 준비(없으면 pull) | `environment` |
 | 4 | 덮어쓰기 파일 작성 후 `docker compose config` | `submission` |
 | 5 | DB 서비스 기동(`--wait`) | `environment` |
@@ -23,13 +24,25 @@ Docker Compose로 제출 앱을 띄우고 PostgreSQL을 제공하며, 동시 요
 
 `start()`가 실패하면 `start_submission_result.error`에 `stage`, `cause`, 로그 발췌(DB 비밀번호는 가림)를 담는다. Compose 프로젝트 이름은 `raccoon-<run_id>`이고, `close()`는 `down -v --remove-orphans`로 이 실행의 컨테이너·볼륨·네트워크를 모두 지운다.
 
+### 기동 방식 선택
+
+1. `app.compose_file`(예약 과제는 `compose.yaml`)이 있으면 그 파일을 사용한다.
+2. 없고 제출물 루트에 `Dockerfile`이 있으면 `app.service` 이름의 서비스 하나에 `build: .`을 지정한 Compose 파일을 생성한다.
+3. 두 파일 모두 없으면 Railpack이 소스의 스택과 시작 명령을 판별한다. Docker Buildx로 계획을 빌드하고 생성한 이미지로 앱 서비스를 구성한다. FastAPI의 경우 루트 `main.py`에서 `app`을 노출하고 의존성에 `fastapi`, `uvicorn`을 선언한다. [Railpack FastAPI 지원](https://railpack.com/languages/python/#fastapi)
+
+실행기가 생성하는 파일은 작업 디렉터리에 둔다. 모델은 빌드와 시작 명령에 관여하지 않는다. `observations.json`의 `runner_info.build_mode`에 각각 `compose`, `dockerfile`, `auto`를 기록한다. 실행을 정리할 때 자동 빌드로 생성한 앱 이미지 태그도 삭제한다.
+
+Railpack은 공식 Linux 이미지를 사용해 계획을 생성하고 Buildx에 전달한다. Windows Docker Desktop에서도 같은 경로를 사용한다. Paketo Python의 기본 시작 명령은 `python`이므로 명령을 따로 선언하지 않은 FastAPI 제출물에는 Railpack을 선택했다. [Railpack BuildKit 프런트엔드](https://railpack.com/platforms/buildkit-frontend) · [Paketo Python 시작 명령](https://paketo.io/docs/reference/python-reference/#start-command)
+
+Windows Docker Desktop에서 `basic` 소스로 측정한 첫 계획 생성은 약 16초, 빌더 레이어와 앱 의존성 다운로드를 포함한 첫 이미지 빌드는 약 121초였다. Docker가 보고한 빌더 이미지 크기는 1.69 GB, 프런트엔드는 46 MB, 생성한 앱은 588 MB였다. 다운로드 속도와 캐시 상태에 따라 시간과 디스크 사용량은 달라진다.
+
 ## 덮어쓰기 파일
 
 실행기는 제출본 Compose 파일 위에 다음 서비스를 붙인다.
 
 | 서비스 | 내용 |
 | --- | --- |
-| 앱(`app.service`) | `app.database_url_env` 이름으로 DB 접속 URL 주입, `app.port`를 `127.0.0.1`의 임의 포트로 공개 |
+| 앱(`app.service`) | `app.database_url_env` 이름으로 DB 접속 URL 주입, `PORT`에 `app.port` 주입, 같은 컨테이너 포트를 `127.0.0.1`의 임의 포트로 공개 |
 | `raccoon-db` | `postgres` 도구 이미지, 실행마다 무작위 비밀번호, `pg_isready` 헬스체크. 비어 있는 DB이며 테이블은 제출물이 만든다 |
 | `raccoon-k6` | `k6` 도구 이미지, `tools` 프로필(검사 때만 `docker compose run`으로 실행) |
 
@@ -91,5 +104,6 @@ python -m pytest
 Docker 없이 도는 단위 테스트가 템플릿, 매핑 시험, k6 스크립트, 덮어쓰기 파일을 검사한다. 실제 Docker로 끝까지 확인하려면 다음을 실행한다. `tests/runner_app`의 검증용 앱(정상·정원 초과·환경 변수 오구현 모드)을 빌드해 기동, 매핑 시험, 검사 3회, 정리까지 확인한다.
 
 ```powershell
-$env:RACCOON_DOCKER_TESTS = "1"; python -m pytest tests/test_runner_docker.py
+$env:RACCOON_DOCKER_TESTS = "1"
+python -m pytest tests/test_runner_docker.py tests/test_example_apps_docker.py
 ```
