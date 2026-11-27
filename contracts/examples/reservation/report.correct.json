@@ -115,7 +115,6 @@
         {"path": "app/reservations/service.py", "start_line": 15, "end_line": 48}
       ],
       "observation_evidence": [],
-      "references": [],
       "feature_summary": null,
       "verification_level": null,
       "issues": []
@@ -137,7 +136,6 @@
           "observed_value": 1
         }
       ],
-      "references": [],
       "feature_summary": null,
       "verification_level": null,
       "issues": []
@@ -153,7 +151,6 @@
         {"path": "README.md", "start_line": 1, "end_line": 60}
       ],
       "observation_evidence": [],
-      "references": [],
       "feature_summary": null,
       "verification_level": null,
       "issues": []
@@ -169,7 +166,6 @@
         {"path": "app/reservations/idempotency.py", "start_line": 1, "end_line": 40}
       ],
       "observation_evidence": [],
-      "references": [],
       "feature_summary": "요청 재전송으로 생기는 중복 예약을 Idempotency-Key 헤더로 방지",
       "verification_level": "static_only",
       "issues": []

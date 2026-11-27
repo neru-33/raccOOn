@@ -114,15 +114,6 @@
           "observed_value": 2
         }
       ],
-      "references": [
-        {
-          "id": "pg16-transaction-iso",
-          "technology": "PostgreSQL",
-          "version": "16",
-          "section_title": "13.2. Transaction Isolation",
-          "url": "https://www.postgresql.org/docs/16/transaction-iso.html"
-        }
-      ],
       "feature_summary": null,
       "verification_level": null,
       "issues": []
@@ -138,7 +129,6 @@
         {"path": "tests/test_enrollments.py", "start_line": 1, "end_line": 30}
       ],
       "observation_evidence": [],
-      "references": [],
       "feature_summary": null,
       "verification_level": null,
       "issues": []
@@ -154,7 +144,6 @@
         {"path": "README.md", "start_line": 12, "end_line": 22}
       ],
       "observation_evidence": [],
-      "references": [],
       "feature_summary": null,
       "verification_level": null,
       "issues": []
@@ -168,7 +157,6 @@
       "reason": "필수 범위를 넘는 기능을 코드와 문서에서 식별하지 못했다.",
       "source_refs": [],
       "observation_evidence": [],
-      "references": [],
       "feature_summary": null,
       "verification_level": null,
       "issues": []
@@ -188,22 +176,6 @@
       "status": "hypothesis",
       "text": "남은 좌석 조회와 예약 INSERT가 기본 격리 수준(READ COMMITTED) 트랜잭션에서 행 잠금 없이 실행되어, 동시 요청들이 같은 남은 좌석 수를 읽고 각각 확정했을 수 있다.",
       "source_ref": {"path": "src/enrollments/service.py", "start_line": 24, "end_line": 33},
-      "references": [
-        {
-          "id": "pg16-transaction-iso",
-          "technology": "PostgreSQL",
-          "version": "16",
-          "section_title": "13.2. Transaction Isolation",
-          "url": "https://www.postgresql.org/docs/16/transaction-iso.html"
-        },
-        {
-          "id": "pg16-explicit-locking",
-          "technology": "PostgreSQL",
-          "version": "16",
-          "section_title": "13.3. Explicit Locking",
-          "url": "https://www.postgresql.org/docs/16/explicit-locking.html"
-        }
-      ],
       "reason": null
     }
   ],

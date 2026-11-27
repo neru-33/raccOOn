@@ -173,7 +173,6 @@
         "reason",
         "source_refs",
         "observation_evidence",
-        "references",
         "feature_summary",
         "verification_level",
         "issues"
@@ -199,17 +198,13 @@
           "type": "array",
           "items": {"$ref": "#/$defs/observation_evidence"}
         },
-        "references": {
-          "type": "array",
-          "items": {"$ref": "common.schema.json#/$defs/reference_summary"}
-        },
         "feature_summary": {"type": ["string", "null"]},
         "verification_level": {
           "description": "extra_feature 항목에서만 값을 가진다.",
           "enum": [null, "static_only", "runtime_verified"]
         },
         "issues": {
-          "description": "근거 확인에서 발견한 문제(없는 회차·지표, 스냅샷에 없는 코드 위치, 조회하지 않은 문서 ID 등)",
+          "description": "근거 확인에서 발견한 문제(없는 회차·지표, 스냅샷에 없는 코드 위치 등)",
           "type": "array",
           "items": {"type": "string"}
         }
@@ -218,19 +213,15 @@
     "hypothesis_result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hypothesis_id", "status", "text", "source_ref", "references", "reason"],
+      "required": ["hypothesis_id", "status", "text", "source_ref", "reason"],
       "properties": {
         "hypothesis_id": {"type": "string"},
         "status": {
-          "description": "hypothesis: 코드 위치와 이번 세션의 문서 조회가 확인됨. insufficient_evidence: 확인 실패.",
+          "description": "hypothesis: 코드 위치가 확인된 검증되지 않은 원인 설명. insufficient_evidence: 코드 위치 확인 실패.",
           "enum": ["hypothesis", "insufficient_evidence"]
         },
         "text": {"type": "string"},
         "source_ref": {"$ref": "common.schema.json#/$defs/file_ref"},
-        "references": {
-          "type": "array",
-          "items": {"$ref": "common.schema.json#/$defs/reference_summary"}
-        },
         "reason": {
           "description": "insufficient_evidence일 때 사유, 아니면 null",
           "type": ["string", "null"]
