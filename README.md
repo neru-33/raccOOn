@@ -1,3 +1,6 @@
+<img width="490" height="144" alt="raccOOn-pixel-dot-arcade" src="https://github.com/user-attachments/assets/c2881afc-956d-4d17-82be-97955db811f4" />
+
+
 # 대전대학교 SW중심대학사업단 프로젝트 Git 템플릿
 
 전공 실습, AI·OSS 동아리, 기업연계캡스톤디자인, 해커톤·경진대회에서 사용하는 프로젝트 기록 및 협업 양식입니다.
