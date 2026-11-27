@@ -18,6 +18,7 @@ from jsonschema import ValidationError
 
 from evaluator import agent, contracts, core, models, reporting, review, runners, snapshot
 from evaluator.runners.compose_postgres_k6 import RunnerConfigError
+from evaluator.terminal import TerminalDisplay
 
 
 class ExitCode(IntEnum):
@@ -203,50 +204,68 @@ def _write_report(report: dict, output: Path) -> None:
         (output / "report.md").write_text("\n".join(lines), encoding="utf-8")
 
 
-def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_meta: dict) -> ExitCode:
+def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_meta: dict,
+                  display: TerminalDisplay) -> ExitCode:
     model = None
     cleanup_error = None
     if task["runner_id"] is None:
         result = _result("not_required")
     else:
-        try:
-            session = runners.open_session(task, args.task.resolve().parent, snapshot_dir, run_meta)
-        except (TypeError, KeyError, FileNotFoundError) as exc:
-            raise RunnerConfigError("Invalid runner configuration or missing fixture") from exc
-        try:
-            if task["operations"]:
-                try:
-                    model = _load_model()
-                except Exception:
-                    result = _result("agent_unavailable", error=_error(
-                        "agent_unavailable", "model", "Could not initialize the evaluation model",
-                    ))
-                else:
-                    result = _run_agent(task, snapshot_dir, session, model)
-            else:
-                result = _run_unmapped(session)
-        finally:
+        with display.stage("Configure runner"):
             try:
-                session.close()
-            except Exception:
-                cleanup_error = _error("execution_error", "cleanup", "Runner could not clean up its resources")
+                session = runners.open_session(task, args.task.resolve().parent, snapshot_dir, run_meta)
+            except (TypeError, KeyError, FileNotFoundError) as exc:
+                raise RunnerConfigError("Invalid runner configuration or missing fixture") from exc
+        try:
+            label = "Discover API and run checks" if task["operations"] else "Run submission checks"
+            with display.stage(label) as stage:
+                if task["operations"]:
+                    try:
+                        model = _load_model()
+                    except Exception:
+                        result = _result("agent_unavailable", error=_error(
+                            "agent_unavailable", "model", "Could not initialize the evaluation model",
+                        ))
+                    else:
+                        result = _run_agent(task, snapshot_dir, session, model)
+                else:
+                    result = _run_unmapped(session)
+                observed = result.get("observations") if isinstance(result, dict) else None
+                if (not isinstance(result, dict) or result.get("error") is not None
+                        or isinstance(observed, dict) and observed.get("status") == "execution_error"):
+                    stage.status = "FAIL"
+        finally:
+            with display.stage("Clean up runner") as stage:
+                try:
+                    session.close()
+                except Exception:
+                    stage.status = "FAIL"
+                    cleanup_error = _error("execution_error", "cleanup", "Runner could not clean up its resources")
 
-    result = _validate_orchestration(result, run_meta)
     review_result = {"status": "off", "review_artifact": None, "error": None}
-    report = core.evaluate(task, run_meta, result, review_result, snapshot_dir)
-    if report["run_status"] == "graded" and args.review == "live":
-        review_result = _run_review(task, snapshot_dir, result, model, run_meta)
+    with display.stage("Score functional results") as stage:
+        result = _validate_orchestration(result, run_meta)
         report = core.evaluate(task, run_meta, result, review_result, snapshot_dir)
+        if report["base_score"] is None:
+            stage.status = "SKIP"
+    if report["run_status"] == "graded" and args.review == "live":
+        with display.stage("Review submission quality") as stage:
+            review_result = _run_review(task, snapshot_dir, result, model, run_meta)
+            report = core.evaluate(task, run_meta, result, review_result, snapshot_dir)
+            if report["review_status"] != "ok":
+                stage.status = "FAIL"
     if cleanup_error is not None:
         report["errors"].append(cleanup_error)
 
-    for field, name in (("mapping_artifact", "mapping.json"), ("observations", "observations.json")):
-        artifact = result[field]
-        if artifact is not None:
-            _write_json(args.out / name, artifact)
-    if report["review_status"] == "ok":
-        _write_json(args.out / "ai_review.json", review_result["review_artifact"])
-    _write_report(report, args.out)
+    with display.stage("Write evaluation report"):
+        for field, name in (("mapping_artifact", "mapping.json"), ("observations", "observations.json")):
+            artifact = result[field]
+            if artifact is not None:
+                _write_json(args.out / name, artifact)
+        if report["review_status"] == "ok":
+            _write_json(args.out / "ai_review.json", review_result["review_artifact"])
+        _write_report(report, args.out)
+    display.summary(report, args.out, review_enabled=args.review == "live")
     return ExitCode.OK if report["run_status"] == "graded" else ExitCode.INCOMPLETE
 
 
@@ -264,9 +283,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {message}", file=sys.stderr)
         return ExitCode.CONTRACT_ERROR
 
+    display = TerminalDisplay(sys.stderr)
     try:
+        display.header(task["task_id"], args.submission)
         with TemporaryDirectory(prefix="raccoon-evaluation-") as work_dir:
-            snapshot_dir, submission_sha256 = snapshot.create_snapshot(args.submission, Path(work_dir))
+            with display.stage("Prepare submission snapshot"):
+                snapshot_dir, submission_sha256 = snapshot.create_snapshot(args.submission, Path(work_dir))
             stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
             run_meta = {
                 "schema_version": task["schema_version"],
@@ -274,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
                 "task_id": task["task_id"],
                 "submission_sha256": submission_sha256,
             }
-            return _evaluate_run(args, task, snapshot_dir, run_meta)
+            return _evaluate_run(args, task, snapshot_dir, run_meta, display)
     except (RunnerConfigError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return ExitCode.CONTRACT_ERROR

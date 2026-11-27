@@ -26,6 +26,8 @@ python -m pytest
 
 자세한 내용은 [예약 사용 예제](examples/reservation/README.md)를 참고하세요.
 
+대화형 터미널에서 `evaluator run`을 실행하면 로고, 진행 단계, 최종 점수와 리포트 경로가 표시됩니다. 진행 화면은 표준 오류(`stderr`)에 표시되며, CI와 `stderr`를 리다이렉트한 실행에서는 표시하지 않습니다.
+
 ## 라이선스
 
 raccOOn의 자체 개발 코드는 [Apache License 2.0](LICENSE)을 따릅니다. 적용 범위와 외부 도구의 라이선스는 [라이선스 안내](LICENSE_NOTICE.md)에서 확인할 수 있습니다.
