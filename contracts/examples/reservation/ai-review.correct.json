@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "run_id": "run-20261127T140000Z-a1b2c3",
+  "task_id": "reservation-v1",
+  "submission_sha256": "15a596e3c98c407e043751ff3b21ff0358a1bdfdf3fe948b1523893a8e5de2e8",
+  "model_info": {
+    "client": "openai-compatible",
+    "endpoint_host": "api.openai.com",
+    "model": "example-model"
+  },
+  "quality_findings": [
+    {
+      "criterion_id": "architecture",
+      "rating": "meets",
+      "reason": "예약 규칙은 서비스 계층 한 곳에서 적용되고 저장은 리포지토리가 담당해 책임을 추적할 수 있다.",
+      "source_refs": [
+        {
+          "path": "app/reservations/service.py",
+          "start_line": 15,
+          "end_line": 48
+        }
+      ],
+      "observation_refs": [],
+      "feature_summary": null
+    },
+    {
+      "criterion_id": "code_quality",
+      "rating": "strong",
+      "reason": "정원 불변식을 조건부 UPDATE 한 곳에서 적용하고, 정원 초과와 마지막 좌석 경쟁을 테스트가 다룬다. 동시성 검사 세 회차 모두 확정 저장 1건이었다.",
+      "source_refs": [
+        {
+          "path": "app/reservations/repository.py",
+          "start_line": 30,
+          "end_line": 52
+        },
+        {
+          "path": "tests/test_capacity.py",
+          "start_line": 1,
+          "end_line": 64
+        }
+      ],
+      "observation_refs": [
+        {
+          "test_id": "reservation.concurrent",
+          "round": 1,
+          "metric": "persisted_confirmed"
+        }
+      ],
+      "feature_summary": null
+    },
+    {
+      "criterion_id": "documentation",
+      "rating": "strong",
+      "reason": "README의 실행 방법과 API 예시가 그대로 재현되었고, 정원 초과 시 409 응답과 동시성 처리 방식이 설명되어 있다.",
+      "source_refs": [
+        {
+          "path": "README.md",
+          "start_line": 1,
+          "end_line": 60
+        }
+      ],
+      "observation_refs": [],
+      "feature_summary": null
+    },
+    {
+      "criterion_id": "extra_feature",
+      "rating": "needs_improvement",
+      "reason": "Idempotency-Key 헤더 처리 코드가 있으나 키 만료와 다른 본문으로 재전송한 경우의 동작이 정의되어 있지 않다.",
+      "source_refs": [
+        {
+          "path": "app/reservations/idempotency.py",
+          "start_line": 1,
+          "end_line": 40
+        }
+      ],
+      "observation_refs": [],
+      "feature_summary": "요청 재전송으로 생기는 중복 예약을 Idempotency-Key 헤더로 방지"
+    }
+  ],
+  "hypotheses": []
+}

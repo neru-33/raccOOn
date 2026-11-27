@@ -1,0 +1,278 @@
+{
+  "mapping_status": "verified",
+  "probe_attempts": 2,
+  "mapping_artifact": {
+    "schema_version": 1,
+    "run_id": "run-20261127T141500Z-d4e5f6",
+    "task_id": "reservation-v1",
+    "submission_sha256": "926026e2e9bcafa1327dfe1833da7000fa21e7b3f3f9817be0df01497cd834f4",
+    "mapping_id": "map-2",
+    "documented_operations": {
+      "create_reservation": {
+        "protocol": "http",
+        "method": "POST",
+        "path_template": "/reserve",
+        "body_template": {
+          "session": "{event_id}",
+          "member": "{user_id}"
+        },
+        "source_ref": {
+          "path": "README.md",
+          "start_line": 12,
+          "end_line": 22
+        },
+        "probe_status": "failed"
+      },
+      "get_reservation": {
+        "protocol": "http",
+        "method": "GET",
+        "path_template": "/enrollments/{reservation_id}",
+        "source_ref": {
+          "path": "README.md",
+          "start_line": 24,
+          "end_line": 30
+        },
+        "probe_status": "verified"
+      }
+    },
+    "operations": {
+      "create_reservation": {
+        "protocol": "http",
+        "method": "POST",
+        "path_template": "/enrollments",
+        "query_template": {},
+        "body_template": {
+          "session": "{event_id}",
+          "member": "{user_id}"
+        },
+        "success_codes": [
+          201
+        ],
+        "response_fields": {
+          "reservation_id": {
+            "pointer": "/data/reference"
+          },
+          "confirmed": {
+            "pointer": "/data/state",
+            "equals": "accepted"
+          }
+        },
+        "source_ref": {
+          "openapi_pointer": "/paths/~1enrollments/post"
+        }
+      },
+      "get_reservation": {
+        "protocol": "http",
+        "method": "GET",
+        "path_template": "/enrollments/{reservation_id}",
+        "query_template": {},
+        "body_template": null,
+        "success_codes": [
+          200
+        ],
+        "response_fields": {
+          "reservation_id": {
+            "pointer": "/data/reference"
+          },
+          "confirmed": {
+            "pointer": "/data/state",
+            "equals": "accepted"
+          }
+        },
+        "source_ref": {
+          "path": "README.md",
+          "start_line": 24,
+          "end_line": 30
+        }
+      }
+    },
+    "probe_attempts": 2,
+    "probe_history": [
+      {
+        "attempt": 1,
+        "candidate": {
+          "create_reservation": {
+            "protocol": "http",
+            "method": "POST",
+            "path_template": "/reserve",
+            "query_template": {},
+            "body_template": {
+              "session": "{event_id}",
+              "member": "{user_id}"
+            },
+            "success_codes": [
+              201
+            ],
+            "response_fields": {
+              "reservation_id": {
+                "pointer": "/data/reference"
+              },
+              "confirmed": {
+                "pointer": "/data/state",
+                "equals": "accepted"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 12,
+              "end_line": 22
+            }
+          },
+          "get_reservation": {
+            "protocol": "http",
+            "method": "GET",
+            "path_template": "/enrollments/{reservation_id}",
+            "query_template": {},
+            "body_template": null,
+            "success_codes": [
+              200
+            ],
+            "response_fields": {
+              "reservation_id": {
+                "pointer": "/data/reference"
+              },
+              "confirmed": {
+                "pointer": "/data/state",
+                "equals": "accepted"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 24,
+              "end_line": 30
+            }
+          }
+        },
+        "result": "failed",
+        "failed_stage": "status_code",
+        "failed_operation": "create_reservation",
+        "http_status": 404,
+        "message": "POST /reserve returned 404; expected one of [201]",
+        "mapping_id": null
+      },
+      {
+        "attempt": 2,
+        "candidate": {
+          "create_reservation": {
+            "protocol": "http",
+            "method": "POST",
+            "path_template": "/enrollments",
+            "query_template": {},
+            "body_template": {
+              "session": "{event_id}",
+              "member": "{user_id}"
+            },
+            "success_codes": [
+              201
+            ],
+            "response_fields": {
+              "reservation_id": {
+                "pointer": "/data/reference"
+              },
+              "confirmed": {
+                "pointer": "/data/state",
+                "equals": "accepted"
+              }
+            },
+            "source_ref": {
+              "openapi_pointer": "/paths/~1enrollments/post"
+            }
+          },
+          "get_reservation": {
+            "protocol": "http",
+            "method": "GET",
+            "path_template": "/enrollments/{reservation_id}",
+            "query_template": {},
+            "body_template": null,
+            "success_codes": [
+              200
+            ],
+            "response_fields": {
+              "reservation_id": {
+                "pointer": "/data/reference"
+              },
+              "confirmed": {
+                "pointer": "/data/state",
+                "equals": "accepted"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 24,
+              "end_line": 30
+            }
+          }
+        },
+        "result": "verified",
+        "failed_stage": null,
+        "failed_operation": null,
+        "http_status": null,
+        "message": null,
+        "mapping_id": "map-2"
+      }
+    ]
+  },
+  "observations": {
+    "schema_version": 1,
+    "run_id": "run-20261127T141500Z-d4e5f6",
+    "task_id": "reservation-v1",
+    "submission_sha256": "926026e2e9bcafa1327dfe1833da7000fa21e7b3f3f9817be0df01497cd834f4",
+    "mapping_id": "map-2",
+    "status": "complete",
+    "observations": [
+      {
+        "test_id": "reservation.functional",
+        "round": 1,
+        "metrics": {
+          "created": true,
+          "retrieved": true
+        }
+      },
+      {
+        "test_id": "reservation.concurrent",
+        "round": 1,
+        "metrics": {
+          "confirmed_responses": 1,
+          "persisted_confirmed": 1
+        }
+      },
+      {
+        "test_id": "reservation.concurrent",
+        "round": 2,
+        "metrics": {
+          "confirmed_responses": 2,
+          "persisted_confirmed": 2
+        }
+      },
+      {
+        "test_id": "reservation.concurrent",
+        "round": 3,
+        "metrics": {
+          "confirmed_responses": 2,
+          "persisted_confirmed": 2
+        }
+      }
+    ],
+    "error": null,
+    "runner_info": {
+      "runner_id": "compose-postgres-k6",
+      "database_mode": "engine_managed",
+      "tools": [
+        {
+          "id": "postgres",
+          "version": "16"
+        },
+        {
+          "id": "k6",
+          "version": "1.0.0"
+        }
+      ]
+    }
+  },
+  "model_info": {
+    "client": "openai-compatible",
+    "endpoint_host": "api.openai.com",
+    "model": "example-model"
+  },
+  "error": null
+}

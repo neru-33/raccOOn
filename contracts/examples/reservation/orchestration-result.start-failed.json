@@ -1,0 +1,17 @@
+{
+  "mapping_status": "not_reached",
+  "probe_attempts": 0,
+  "mapping_artifact": null,
+  "observations": null,
+  "model_info": {
+    "client": "openai-compatible",
+    "endpoint_host": "api.openai.com",
+    "model": "example-model"
+  },
+  "error": {
+    "code": "submission_start_failed",
+    "stage": "readiness",
+    "message": "GET /health did not return 200 within 60s; runner infrastructure checks passed",
+    "log_excerpt": "Traceback (most recent call last):\n  File \"/app/main.py\", line 9, in <module>\n    DB = os.environ[\"DB_URL\"]\nKeyError: 'DB_URL'"
+  }
+}

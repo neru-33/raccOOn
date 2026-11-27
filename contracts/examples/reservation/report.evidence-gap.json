@@ -1,0 +1,374 @@
+{
+  "schema_version": 1,
+  "run_id": "run-20261127T150000Z-9c8d7e",
+  "task_id": "reservation-v1",
+  "submission_sha256": "484e1ba70da9b7be7a0fd308c3129298573f8b545b5034e41a6ca11a688183b2",
+  "run_status": "graded",
+  "mapping_status": "verified",
+  "mapping_id": "map-1",
+  "probe_attempts": 1,
+  "calls": {
+    "documented_operations": {
+      "create_reservation": {
+        "protocol": "http",
+        "method": "POST",
+        "path_template": "/reservations",
+        "body_template": {
+          "eventId": "{event_id}",
+          "userId": "{user_id}"
+        },
+        "source_ref": {
+          "path": "README.md",
+          "start_line": 18,
+          "end_line": 27
+        },
+        "probe_status": "verified"
+      },
+      "get_reservation": {
+        "protocol": "http",
+        "method": "GET",
+        "path_template": "/reservations/{reservation_id}",
+        "source_ref": {
+          "path": "README.md",
+          "start_line": 29,
+          "end_line": 36
+        },
+        "probe_status": "verified"
+      }
+    },
+    "operations": {
+      "create_reservation": {
+        "protocol": "http",
+        "method": "POST",
+        "path_template": "/reservations",
+        "query_template": {},
+        "body_template": {
+          "eventId": "{event_id}",
+          "userId": "{user_id}"
+        },
+        "success_codes": [
+          201
+        ],
+        "response_fields": {
+          "reservation_id": {
+            "pointer": "/id"
+          },
+          "confirmed": {
+            "pointer": "/status",
+            "equals": "CONFIRMED"
+          }
+        },
+        "source_ref": {
+          "path": "README.md",
+          "start_line": 18,
+          "end_line": 27
+        }
+      },
+      "get_reservation": {
+        "protocol": "http",
+        "method": "GET",
+        "path_template": "/reservations/{reservation_id}",
+        "query_template": {},
+        "body_template": null,
+        "success_codes": [
+          200
+        ],
+        "response_fields": {
+          "reservation_id": {
+            "pointer": "/id"
+          },
+          "confirmed": {
+            "pointer": "/status",
+            "equals": "CONFIRMED"
+          }
+        },
+        "source_ref": {
+          "path": "README.md",
+          "start_line": 29,
+          "end_line": 36
+        }
+      }
+    }
+  },
+  "base_score": 40,
+  "max_score": 40,
+  "rule_results": [
+    {
+      "rule_id": "functional.create",
+      "points_awarded": 8,
+      "points_available": 8,
+      "applied_conditions": [
+        {
+          "kind": "award",
+          "round": 1,
+          "metric": "created",
+          "op": "eq",
+          "value": true,
+          "observed": true,
+          "passed": true
+        }
+      ],
+      "evidence": [
+        {
+          "test_id": "reservation.functional",
+          "round": 1,
+          "metrics": {
+            "created": true,
+            "retrieved": true
+          }
+        }
+      ]
+    },
+    {
+      "rule_id": "functional.retrieve",
+      "points_awarded": 8,
+      "points_available": 8,
+      "applied_conditions": [
+        {
+          "kind": "award",
+          "round": 1,
+          "metric": "retrieved",
+          "op": "eq",
+          "value": true,
+          "observed": true,
+          "passed": true
+        }
+      ],
+      "evidence": [
+        {
+          "test_id": "reservation.functional",
+          "round": 1,
+          "metrics": {
+            "created": true,
+            "retrieved": true
+          }
+        }
+      ]
+    },
+    {
+      "rule_id": "concurrent.single_confirmation",
+      "points_awarded": 24,
+      "points_available": 24,
+      "applied_conditions": [
+        {
+          "kind": "veto",
+          "round": 1,
+          "metric": "persisted_confirmed",
+          "op": "gte",
+          "value": 2,
+          "observed": 1,
+          "passed": false
+        },
+        {
+          "kind": "veto",
+          "round": 2,
+          "metric": "persisted_confirmed",
+          "op": "gte",
+          "value": 2,
+          "observed": 1,
+          "passed": false
+        },
+        {
+          "kind": "veto",
+          "round": 3,
+          "metric": "persisted_confirmed",
+          "op": "gte",
+          "value": 2,
+          "observed": 1,
+          "passed": false
+        },
+        {
+          "kind": "award",
+          "round": 1,
+          "metric": "confirmed_responses",
+          "op": "eq",
+          "value": 1,
+          "observed": 1,
+          "passed": true
+        },
+        {
+          "kind": "award",
+          "round": 1,
+          "metric": "persisted_confirmed",
+          "op": "eq",
+          "value": 1,
+          "observed": 1,
+          "passed": true
+        },
+        {
+          "kind": "award",
+          "round": 2,
+          "metric": "confirmed_responses",
+          "op": "eq",
+          "value": 1,
+          "observed": 1,
+          "passed": true
+        },
+        {
+          "kind": "award",
+          "round": 2,
+          "metric": "persisted_confirmed",
+          "op": "eq",
+          "value": 1,
+          "observed": 1,
+          "passed": true
+        },
+        {
+          "kind": "award",
+          "round": 3,
+          "metric": "confirmed_responses",
+          "op": "eq",
+          "value": 1,
+          "observed": 1,
+          "passed": true
+        },
+        {
+          "kind": "award",
+          "round": 3,
+          "metric": "persisted_confirmed",
+          "op": "eq",
+          "value": 1,
+          "observed": 1,
+          "passed": true
+        }
+      ],
+      "evidence": [
+        {
+          "test_id": "reservation.concurrent",
+          "round": 1,
+          "metrics": {
+            "confirmed_responses": 1,
+            "persisted_confirmed": 1
+          }
+        },
+        {
+          "test_id": "reservation.concurrent",
+          "round": 2,
+          "metrics": {
+            "confirmed_responses": 1,
+            "persisted_confirmed": 1
+          }
+        },
+        {
+          "test_id": "reservation.concurrent",
+          "round": 3,
+          "metrics": {
+            "confirmed_responses": 1,
+            "persisted_confirmed": 1
+          }
+        }
+      ]
+    }
+  ],
+  "quality_score": null,
+  "quality_max_score": 60,
+  "quality_results": [
+    {
+      "criterion_id": "architecture",
+      "status": "accepted",
+      "rating": "meets",
+      "points_awarded": 10,
+      "max_points": 15,
+      "reason": "예약 규칙은 서비스 계층 한 곳에서 적용되고 저장은 리포지토리가 담당해 책임을 추적할 수 있다.",
+      "source_refs": [
+        {
+          "path": "app/reservations/service.py",
+          "start_line": 15,
+          "end_line": 48
+        }
+      ],
+      "observation_evidence": [],
+      "feature_summary": null,
+      "verification_level": null,
+      "issues": []
+    },
+    {
+      "criterion_id": "code_quality",
+      "status": "insufficient_evidence",
+      "rating": "strong",
+      "points_awarded": null,
+      "max_points": 20,
+      "reason": "정원 불변식을 조건부 UPDATE 한 곳에서 적용하고, 정원 초과와 마지막 좌석 경쟁을 테스트가 다룬다. 동시성 검사 세 회차 모두 확정 저장 1건이었다.",
+      "source_refs": [
+        {
+          "path": "app/reservations/repository.py",
+          "start_line": 30,
+          "end_line": 52
+        },
+        {
+          "path": "tests/test_capacity.py",
+          "start_line": 1,
+          "end_line": 64
+        }
+      ],
+      "observation_evidence": [
+        {
+          "ref": {
+            "test_id": "reservation.concurrent",
+            "round": 1,
+            "metric": "persisted_confirmed"
+          },
+          "observed_value": 1
+        }
+      ],
+      "feature_summary": null,
+      "verification_level": null,
+      "issues": [
+        "tests/test_capacity.py: end_line 64가 파일 줄 수 40을 넘는다"
+      ]
+    },
+    {
+      "criterion_id": "documentation",
+      "status": "accepted",
+      "rating": "strong",
+      "points_awarded": 15,
+      "max_points": 15,
+      "reason": "README의 실행 방법과 API 예시가 그대로 재현되었고, 정원 초과 시 409 응답과 동시성 처리 방식이 설명되어 있다.",
+      "source_refs": [
+        {
+          "path": "README.md",
+          "start_line": 1,
+          "end_line": 60
+        }
+      ],
+      "observation_evidence": [],
+      "feature_summary": null,
+      "verification_level": null,
+      "issues": []
+    },
+    {
+      "criterion_id": "extra_feature",
+      "status": "accepted",
+      "rating": "needs_improvement",
+      "points_awarded": 3,
+      "max_points": 10,
+      "reason": "Idempotency-Key 헤더 처리 코드가 있으나 키 만료와 다른 본문으로 재전송한 경우의 동작이 정의되어 있지 않다.",
+      "source_refs": [
+        {
+          "path": "app/reservations/idempotency.py",
+          "start_line": 1,
+          "end_line": 40
+        }
+      ],
+      "observation_evidence": [],
+      "feature_summary": "요청 재전송으로 생기는 중복 예약을 Idempotency-Key 헤더로 방지",
+      "verification_level": "static_only",
+      "issues": []
+    }
+  ],
+  "total_score": null,
+  "total_max_score": 100,
+  "review_status": "ok",
+  "review_result": {
+    "status": "ok",
+    "review_artifact": "ai_review.json",
+    "error": null
+  },
+  "hypothesis_results": [],
+  "model_info": {
+    "client": "openai-compatible",
+    "endpoint_host": "api.openai.com",
+    "model": "example-model"
+  },
+  "errors": []
+}

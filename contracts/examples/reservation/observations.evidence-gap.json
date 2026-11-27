@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "run_id": "run-20261127T150000Z-9c8d7e",
+  "task_id": "reservation-v1",
+  "submission_sha256": "484e1ba70da9b7be7a0fd308c3129298573f8b545b5034e41a6ca11a688183b2",
+  "mapping_id": "map-1",
+  "status": "complete",
+  "observations": [
+    {
+      "test_id": "reservation.functional",
+      "round": 1,
+      "metrics": {
+        "created": true,
+        "retrieved": true
+      }
+    },
+    {
+      "test_id": "reservation.concurrent",
+      "round": 1,
+      "metrics": {
+        "confirmed_responses": 1,
+        "persisted_confirmed": 1
+      }
+    },
+    {
+      "test_id": "reservation.concurrent",
+      "round": 2,
+      "metrics": {
+        "confirmed_responses": 1,
+        "persisted_confirmed": 1
+      }
+    },
+    {
+      "test_id": "reservation.concurrent",
+      "round": 3,
+      "metrics": {
+        "confirmed_responses": 1,
+        "persisted_confirmed": 1
+      }
+    }
+  ],
+  "error": null,
+  "runner_info": {
+    "runner_id": "compose-postgres-k6",
+    "database_mode": "engine_managed",
+    "tools": [
+      {
+        "id": "postgres",
+        "version": "16"
+      },
+      {
+        "id": "k6",
+        "version": "1.0.0"
+      }
+    ]
+  }
+}

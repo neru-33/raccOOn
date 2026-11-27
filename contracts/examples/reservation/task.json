@@ -15,6 +15,7 @@
       "compose_file": "compose.yaml",
       "service": "app",
       "port": 8080,
+      "health_path": "/health",
       "ready_timeout_seconds": 60,
       "env": [
         {
@@ -23,6 +24,12 @@
           "description": "평가 환경이 제공하는 테스트 DB 접속 정보"
         }
       ]
+    },
+    "fixtures": {
+      "schema_sql": "fixtures/schema.sql",
+      "reset_sql": "TRUNCATE reservations, events",
+      "seed_event_sql": "INSERT INTO events (id, capacity) VALUES (%(event_id)s, %(capacity)s)",
+      "confirmed_count_sql": "SELECT count(*) FROM reservations WHERE event_id = %(event_id)s AND status = 'CONFIRMED'"
     },
     "probe": {
       "event_capacity": 5

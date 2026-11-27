@@ -15,10 +15,13 @@ class RunnerSession(Protocol):
     def start(self) -> dict[str, Any]:
         """Bring up the submission and its dependencies. Returns ``start_submission_result``.
 
+        The submission's Compose file holds only the app service. The runner
+        adds the dependencies (e.g. the database) with its own override file and
+        injects the variables declared in ``runner_config.app.env``.
         Check the runner's own infrastructure (containers, database reachable by
-        the runner) before waiting for the submission to become ready, and set
-        ``error.cause`` to ``environment`` or ``submission`` accordingly.
-        Inject the variables declared in ``runner_config.app.env`` into the app.
+        the runner) first, then wait until ``GET runner_config.app.health_path``
+        returns 200 within ``ready_timeout_seconds``. Set ``error.cause`` to
+        ``environment`` or ``submission`` accordingly.
         """
         ...
 
