@@ -1,0 +1,209 @@
+"""CLI integration through the public module boundaries without live calls."""
+
+import json
+
+from evaluator import cli, contracts
+
+EXAMPLES = contracts.CONTRACTS_DIR / "examples" / "reservation"
+
+
+def _example(name):
+    return json.loads((EXAMPLES / f"{name}.json").read_text(encoding="utf-8"))
+
+
+def _invocation(tmp_path, task_path=None, mode="off"):
+    submission = tmp_path / "submission"
+    submission.mkdir()
+    (submission / "README.md").write_text("example\n", encoding="utf-8")
+    output = tmp_path / "output"
+    task_path = task_path or EXAMPLES / "task.json"
+    return ["run", "--task", str(task_path), "--submission", str(submission), "--out", str(output),
+            "--review", mode], output
+
+
+class _Session:
+    def __init__(self, snapshot, meta, variant):
+        self.snapshot = snapshot
+        self.meta = meta
+        self.closed = False
+        self.result = _example(f"orchestration-result.{variant}")
+        for field in ("mapping_artifact", "observations"):
+            if self.result[field] is not None:
+                self.result[field].update(meta)
+
+    def mapping_artifact(self):
+        return self.result["mapping_artifact"]
+
+    def close(self):
+        assert self.snapshot.exists()
+        self.closed = True
+
+
+class _Model:
+    model_info = {"client": "mock", "endpoint_host": None, "model": "offline"}
+
+
+def _install_session(monkeypatch, variant):
+    sessions = []
+
+    def open_session(task, task_dir, snapshot, meta):
+        assert task_dir == EXAMPLES
+        assert (snapshot / "README.md").is_file()
+        session = _Session(snapshot, meta, variant)
+        sessions.append(session)
+        return session
+
+    monkeypatch.setattr(cli.runners, "open_session", open_session)
+    monkeypatch.setattr(cli.models, "load_client", lambda env: _Model())
+    return sessions
+
+
+def _report(output):
+    report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    contracts.validate("report.schema.json", report)
+    assert (output / "report.md").is_file()
+    return report
+
+
+def test_live_cli_writes_artifacts_with_a_shared_run_id(tmp_path, monkeypatch):
+    args, output = _invocation(tmp_path, mode="live")
+    sessions = _install_session(monkeypatch, "correct")
+    monkeypatch.setattr(cli.agent, "orchestrate", lambda task, snapshot, session, model: session.result)
+
+    def review(task, snapshot, observations, mapping, mode, model):
+        assert sessions[0].closed
+        assert observations["run_id"] == mapping["run_id"]
+        assert isinstance(model, _Model)
+        artifact = _example("ai-review.correct")
+        artifact.update(sessions[0].meta)
+        artifact.update(quality_findings=[], hypotheses=[])
+        return {"status": "ok", "review_artifact": artifact, "error": None}
+
+    monkeypatch.setattr(cli.review, "review", review)
+
+    assert cli.main(args) == cli.ExitCode.OK
+    report = _report(output)
+    assert report["base_score"] == 40
+    assert report["review_status"] == "ok"
+    for name in ("mapping.json", "observations.json", "ai_review.json"):
+        artifact = json.loads((output / name).read_text(encoding="utf-8"))
+        assert {key: artifact[key] for key in sessions[0].meta} == sessions[0].meta
+    assert not sessions[0].snapshot.exists()
+
+
+def test_agent_failure_closes_runner_and_preserves_probe_history(tmp_path, monkeypatch):
+    args, output = _invocation(tmp_path, mode="live")
+    sessions = _install_session(monkeypatch, "unresolved")
+
+    def fail(*args):
+        raise RuntimeError("agent failed")
+
+    review_calls = []
+    monkeypatch.setattr(cli.agent, "orchestrate", fail)
+    monkeypatch.setattr(cli.review, "review", lambda *args: review_calls.append(args))
+
+    assert cli.main(args) == cli.ExitCode.INCOMPLETE
+    report = _report(output)
+    assert report["errors"][0]["code"] == "agent_unavailable"
+    assert report["base_score"] is None
+    assert report["probe_attempts"] == 2
+    assert report["review_status"] == "skipped"
+    assert not review_calls
+    assert (output / "mapping.json").is_file()
+    assert not (output / "observations.json").exists()
+    assert sessions[0].closed
+    assert not sessions[0].snapshot.exists()
+
+
+def test_review_failure_preserves_functional_score(tmp_path, monkeypatch):
+    args, output = _invocation(tmp_path, mode="live")
+    _install_session(monkeypatch, "correct")
+    monkeypatch.setattr(cli.agent, "orchestrate", lambda task, snapshot, session, model: session.result)
+
+    def fail(*args):
+        raise RuntimeError("review failed")
+
+    monkeypatch.setattr(cli.review, "review", fail)
+
+    assert cli.main(args) == cli.ExitCode.OK
+    report = _report(output)
+    assert report["base_score"] == 40
+    assert report["review_status"] == "unavailable"
+    assert not (output / "ai_review.json").exists()
+
+
+def test_review_off_without_runner_needs_no_model(tmp_path, monkeypatch):
+    task_path = tmp_path / "task.json"
+    task = _example("task")
+    task.update(runner_id=None, runner_config={}, operations={}, metrics={}, rules=[])
+    task["score_limits"]["functional"] = 0
+    task_path.write_text(json.dumps(task), encoding="utf-8")
+    args, output = _invocation(tmp_path, task_path)
+
+    def unexpected(*args):
+        raise AssertionError("unexpected external integration")
+
+    monkeypatch.setattr(cli.runners, "open_session", unexpected)
+    monkeypatch.setattr(cli.models, "load_client", unexpected)
+
+    assert cli.main(args) == cli.ExitCode.OK
+    report = _report(output)
+    assert report["mapping_status"] == "not_required"
+    assert report["base_score"] == 0
+    assert report["review_status"] == "off"
+
+
+def test_invalid_task_fails_before_output_creation(tmp_path):
+    task_path = tmp_path / "task.json"
+    task_path.write_text('{"schema_version": 1}', encoding="utf-8")
+    args, output = _invocation(tmp_path, task_path)
+
+    assert cli.main(args) == cli.ExitCode.CONTRACT_ERROR
+    assert not output.exists()
+
+
+def test_runner_without_operations_uses_null_mapping_without_loading_model(tmp_path, monkeypatch):
+    task_path = tmp_path / "task.json"
+    task = _example("task")
+    task["operations"] = {}
+    task_path.write_text(json.dumps(task), encoding="utf-8")
+    args, output = _invocation(tmp_path, task_path)
+    calls = []
+
+    class Session:
+        def __init__(self, meta):
+            self.meta = meta
+
+        def start(self):
+            calls.append("start")
+            return {"status": "ready"}
+
+        def run_checks(self, mapping_id):
+            calls.append(("check", mapping_id))
+            return {**_example("observations.correct"), **self.meta, "mapping_id": mapping_id}
+
+        def close(self):
+            calls.append("close")
+
+    monkeypatch.setattr(cli.runners, "open_session", lambda task, folder, snapshot, meta: Session(meta))
+    monkeypatch.setattr(cli.models, "load_client", lambda env: calls.append("model"))
+
+    assert cli.main(args) == cli.ExitCode.OK
+    assert _report(output)["base_score"] == 40
+    assert calls == ["start", ("check", None), "close"]
+    assert not (output / "mapping.json").exists()
+
+
+def test_model_config_uses_dotenv_and_prefers_process_environment(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("EVALUATOR_MODEL=from-file\nEVALUATOR_RESPONSE_FORMAT=none\n", encoding="utf-8")
+    monkeypatch.setenv("EVALUATOR_MODEL", "from-environment")
+    monkeypatch.delenv("EVALUATOR_RESPONSE_FORMAT", raising=False)
+
+    def load_client(env):
+        assert env["EVALUATOR_MODEL"] == "from-environment"
+        assert env["EVALUATOR_RESPONSE_FORMAT"] == "none"
+        return _Model()
+
+    monkeypatch.setattr(cli.models, "load_client", load_client)
+    assert isinstance(cli._load_model(), _Model)
