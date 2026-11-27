@@ -15,7 +15,6 @@ EXAMPLES_DIR = contracts.CONTRACTS_DIR / "examples" / "reservation"
 
 SCHEMA_BY_PREFIX = {
     "task": "task.schema.json",
-    "reference-catalog": "reference-catalog.schema.json",
     "mapping": "mapping.schema.json",
     "observations": "observations.schema.json",
     "ai-review": "ai-review.schema.json",
@@ -264,17 +263,23 @@ def test_report_scores_are_consistent(path: Path) -> None:
         assert report["base_score"] is None and report["errors"]
 
 
-def test_review_findings_cite_retrieved_references_and_existing_observations() -> None:
+def test_review_findings_cite_existing_observations() -> None:
     review = _example("ai-review.oversell.json")
     obs = _example("observations.oversell.json")
-    retrieved = {r["id"] for r in review["retrieved_references"]}
     rows = {(o["test_id"], o["round"]): o["metrics"] for o in obs["observations"]}
     for finding in review["quality_findings"]:
-        assert set(finding["reference_ids"]) <= retrieved
         for ref in finding["observation_refs"]:
             assert ref["metric"] in rows[(ref["test_id"], ref["round"])]
-    for hyp in review["hypotheses"]:
-        assert set(hyp["reference_ids"]) <= retrieved
+
+
+def test_report_quality_evidence_matches_observations() -> None:
+    report = _example("report.oversell.json")
+    obs = _example("observations.oversell.json")
+    rows = {(o["test_id"], o["round"]): o["metrics"] for o in obs["observations"]}
+    for result in report["quality_results"]:
+        for ev in result["observation_evidence"]:
+            ref = ev["ref"]
+            assert rows[(ref["test_id"], ref["round"])][ref["metric"]] == ev["observed_value"]
 
 
 def test_review_model_output_example_conforms() -> None:
@@ -300,10 +305,13 @@ def test_review_output_schema_is_strict_compatible() -> None:
     _assert_strict_compatible(contracts.review_output_schema())
 
 
-@pytest.mark.parametrize("tool_set", ["agent", "review"])
-def test_tool_definitions_are_self_contained(tool_set: str) -> None:
-    defs = contracts.tool_definitions(tool_set)
-    assert [d["function"]["name"] for d in defs] == contracts.tool_names(tool_set)
+def test_review_session_has_no_tools() -> None:
+    assert contracts.tool_definitions("review") == []
+
+
+def test_tool_definitions_are_self_contained() -> None:
+    defs = contracts.tool_definitions("agent")
+    assert [d["function"]["name"] for d in defs] == contracts.tool_names("agent")
     text = json.dumps(defs)
     assert "$ref" not in text and "$defs" not in text
     for d in defs:

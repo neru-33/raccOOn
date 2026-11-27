@@ -123,19 +123,6 @@
     "rating": {
       "enum": ["needs_improvement", "meets", "strong", "insufficient_evidence", "not_applicable"]
     },
-    "reference_summary": {
-      "description": "호스트가 제공한 공식 문서의 메타데이터(본문 제외)",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "technology", "version", "section_title", "url"],
-      "properties": {
-        "id": {"$ref": "#/$defs/identifier"},
-        "technology": {"type": "string", "minLength": 1},
-        "version": {"type": "string", "minLength": 1},
-        "section_title": {"type": "string", "minLength": 1},
-        "url": {"type": "string", "pattern": "^https?://"}
-      }
-    },
     "error": {
       "type": "object",
       "additionalProperties": false,

@@ -69,11 +69,6 @@
       "description": "출제자가 작성한 품질 평가 지침",
       "type": "string",
       "minLength": 1
-    },
-    "review_reference_catalog": {
-      "description": "공식 문서 카탈로그 파일 경로. --review live에서는 필수.",
-      "type": "string",
-      "minLength": 1
     }
   },
   "$defs": {

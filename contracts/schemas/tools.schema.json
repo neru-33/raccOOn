@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/neru-33/raccOOn/contracts/v1/tools.schema.json",
   "title": "모델 도구 인자와 결과",
-  "description": "평가 에이전트와 리뷰 세션이 모델에 제공하는 도구. <이름>_args는 함수 parameters, <이름>_result는 호스트가 돌려주는 결과다. 모든 도구는 실패 시 tool_error를 반환할 수 있다. evaluator.contracts.tool_definitions()가 참조를 펼쳐 모델 API용 함수 정의를 만든다.",
+  "description": "평가 에이전트가 모델에 제공하는 도구. 리뷰 세션은 v1에서 도구 없이 구조화 출력만 사용한다. <이름>_args는 함수 parameters, <이름>_result는 호스트가 돌려주는 결과다. 모든 도구는 실패 시 tool_error를 반환할 수 있다. evaluator.contracts.tool_definitions()가 참조를 펼쳐 모델 API용 함수 정의를 만든다.",
   "x-tool-sets": {
     "agent": ["read_source", "start_submission", "probe_mapping", "run_checks"],
-    "review": ["lookup_reference"]
+    "review": []
   },
   "$defs": {
     "tool_error": {
@@ -199,29 +199,6 @@
             }
           ]
         }
-      }
-    },
-
-    "lookup_reference_args": {
-      "description": "출제자가 등록한 공식 문서 카탈로그에서 지정한 절의 본문을 읽는다.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["reference_id"],
-      "properties": {
-        "reference_id": {"type": "string"}
-      }
-    },
-    "lookup_reference_result": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "technology", "version", "section_title", "url", "text"],
-      "properties": {
-        "id": {"type": "string"},
-        "technology": {"type": "string"},
-        "version": {"type": "string"},
-        "section_title": {"type": "string"},
-        "url": {"type": "string"},
-        "text": {"type": "string"}
       }
     }
   }

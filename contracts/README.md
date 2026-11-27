@@ -7,12 +7,11 @@
 | 스키마 | 작성자 | 용도 |
 | --- | --- | --- |
 | `task.schema.json` | 출제자 | 과제 설정 `task.json`. 논리 동작, 지표 선언, 기능 배점 규칙, 품질 루브릭, 리뷰 지침 |
-| `reference-catalog.schema.json` | 출제자 | 리뷰가 조회할 공식 문서 카탈로그 |
 | `mapping-candidate.schema.json` | 평가 에이전트 | `probe_mapping`에 제출하는 API 호출 후보 |
 | `mapping.schema.json` | 실행기 | `mapping.json`. 문서에 적힌 호출법, 확인된 호출법, 시험 이력 |
 | `observations.schema.json` | 실행기 | `observations.json`. 검사 회차별 관찰값 |
 | `ai-review-model-output.schema.json` | 리뷰 모델 | 리뷰 모델의 최종 JSON 응답 (구조화 출력 strict 호환) |
-| `ai-review.schema.json` | 리뷰 모듈 | `ai_review.json`. 모델 응답에 공통 봉투, 모델 정보, 조회한 문서 목록을 붙인 산출물 |
+| `ai-review.schema.json` | 리뷰 모듈 | `ai_review.json`. 모델 응답에 공통 봉투와 모델 정보를 붙인 산출물 |
 | `report.schema.json` | 평가 코어 | `report.json`. 기능·품질 점수, 근거, 가설, 오류 |
 | `tools.schema.json` | 엔진 | 모델 도구의 인자(`<이름>_args`)와 결과(`<이름>_result`) |
 | `runtime.schema.json` | 엔진 | 모듈 간 전달 객체 `run_meta`, `orchestration_result`, `review_result` |
@@ -45,7 +44,7 @@
 task.json ─┐
 제출본 ────┼─> agent ──(tools)──> runner ──> mapping.json, observations.json
            │                                         │
-           │                       review <──────────┤  (reference-catalog.json)
+           │                       review <──────────┤
            │                         │               │
            │                   ai_review.json        │
            └──────────────> core <───┴───────────────┘
@@ -68,7 +67,6 @@ task.json ─┐
 | `start_submission` | 에이전트 | 없음 | 준비 상태, 실행 중인 제출물에서 얻은 사용법 자료(`discovered`, 예: OpenAPI 문서), 평가 도구 상태 |
 | `probe_mapping` | 에이전트 | `candidate` | `verified` + `mapping_id`, 또는 실패 단계·HTTP 상태 |
 | `run_checks` | 에이전트 | `mapping_id` | 검사 완료 여부와 관측 행 수. 호출 후 세션 종료 |
-| `lookup_reference` | 리뷰 | `reference_id` | 문서 ID·기술·버전·절 제목·URL·본문 |
 
 도구 호출이 실패하면 `{"error": {"code", "message"}}`를 돌려준다. `evaluator.contracts.tool_definitions("agent" | "review")`는 참조를 펼친 Chat Completions `tools` 형식의 함수 정의를 만든다. 일부 엔드포인트가 받지 않는 키워드(`pattern`, `propertyNames` 등)는 빼고 보내며, 호스트는 받은 인자를 원래 스키마로 다시 검증한다.
 
@@ -109,11 +107,12 @@ task.json ─┐
 | --- | --- |
 | `source_refs` | 스냅샷에 파일이 있고 `1 ≤ start_line ≤ end_line ≤ 파일 줄 수` |
 | `observation_refs` | 같은 실행의 `observations.json`에 해당 `test_id`·`round`·`metric`이 있음. 값은 `observation_evidence`에 복사 |
-| `reference_ids` | 이번 리뷰 세션의 `retrieved_references`에 있음 |
 
 참조 하나라도 확인되지 않거나 판정이 `insufficient_evidence`이면 그 항목은 `status: insufficient_evidence`로 배점을 보류하고 `issues`에 사유를 남긴다. `not_applicable`은 항목의 `points_by_rating`에 `not_applicable`이 있을 때만 허용된다. `extra_feature` 항목은 `verification_rules` 중 하나라도 만족하면 `runtime_verified`, 아니면 `static_only`다.
 
-가설은 코드 위치와 이번 세션의 문서 조회가 모두 확인되면 `hypothesis`, 아니면 `insufficient_evidence`로 표시한다.
+가설은 제출물의 결함 원인에 대한 검증되지 않은 설명이다. 코드 위치가 확인되면 `hypothesis`, 아니면 `insufficient_evidence`로 표시한다.
+
+리뷰 세션은 v1에서 도구 없이 구조화 출력만 사용한다. 품질 근거는 코어가 결정적으로 확인할 수 있는 코드 위치와 실행 관측값으로 한정한다.
 
 ## 점수와 상태
 

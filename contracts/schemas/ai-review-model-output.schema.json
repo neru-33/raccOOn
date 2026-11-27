@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/neru-33/raccOOn/contracts/v1/ai-review-model-output.schema.json",
   "title": "리뷰 모델 최종 응답",
-  "description": "리뷰 세션에서 모델이 반환하는 JSON. 구조화 출력 strict 모드와 호환되도록 외부 참조 없이 작성하고, 모든 속성을 필수로 두며 선택 값은 null로 표현한다. 호스트가 공통 봉투, model_info, retrieved_references를 붙여 ai_review.json을 만든다.",
+  "description": "리뷰 세션에서 모델이 반환하는 JSON. 구조화 출력 strict 모드와 호환되도록 외부 참조 없이 작성하고, 모든 속성을 필수로 두며 선택 값은 null로 표현한다. 호스트가 공통 봉투와 model_info를 붙여 ai_review.json을 만든다.",
   "type": "object",
   "additionalProperties": false,
   "required": ["quality_findings", "hypotheses"],
@@ -46,7 +46,6 @@
         "reason",
         "source_refs",
         "observation_refs",
-        "reference_ids",
         "feature_summary"
       ],
       "properties": {
@@ -64,11 +63,6 @@
           "type": "array",
           "items": {"$ref": "#/$defs/observation_ref"}
         },
-        "reference_ids": {
-          "description": "이번 세션에서 lookup_reference로 조회한 문서 ID만 쓸 수 있다.",
-          "type": "array",
-          "items": {"type": "string"}
-        },
         "feature_summary": {
           "description": "extra_feature 항목에서 식별한 추가 기능과 해결한 문제. 그 외 항목은 null.",
           "type": ["string", "null"]
@@ -78,15 +72,11 @@
     "hypothesis": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "text", "source_ref", "reference_ids"],
+      "required": ["id", "text", "source_ref"],
       "properties": {
         "id": {"type": "string"},
         "text": {"type": "string"},
-        "source_ref": {"$ref": "#/$defs/file_ref"},
-        "reference_ids": {
-          "type": "array",
-          "items": {"type": "string"}
-        }
+        "source_ref": {"$ref": "#/$defs/file_ref"}
       }
     }
   }
