@@ -4,8 +4,12 @@
 
 ## 실행
 
+`compose.yaml`은 앱 서비스만 정의합니다. 로컬에서는 `compose.local.yaml`을 겹쳐 PostgreSQL을 함께 띄웁니다. DB 헬스체크가 통과한 뒤 앱이 시작되고 `http://localhost:8080`에서 요청을 받습니다. 호스트 포트가 사용 중이면 `APP_PORT`로 바꿉니다.
+
 ```bash
-docker compose up --build
+docker compose -f compose.yaml -f compose.local.yaml up --build
+# 정리(DB 데이터 포함)
+docker compose -f compose.yaml -f compose.local.yaml down -v
 ```
 
 | 항목 | 값 |

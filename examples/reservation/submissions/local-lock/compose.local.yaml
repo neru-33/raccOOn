@@ -1,0 +1,22 @@
+# 로컬 단독 실행용 오버라이드: PostgreSQL을 함께 띄우고 앱 포트를 공개합니다.
+# docker compose -f compose.yaml -f compose.local.yaml up --build  (호스트 포트 변경: APP_PORT)
+services:
+  app:
+    environment:
+      DATABASE_URL: postgresql://reservation:reservation@db:5432/reservation
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: reservation
+      POSTGRES_PASSWORD: reservation
+      POSTGRES_DB: reservation
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reservation -d reservation"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

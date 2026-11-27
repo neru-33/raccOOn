@@ -6,8 +6,10 @@
 
 `DATABASE_URL`로 PostgreSQL 접속 정보를 받습니다. 앱이 시작할 때 필요한 테이블(`events`, `reservations`)을 만듭니다.
 
+`compose.yaml`에는 앱 서비스만 있습니다. 로컬에서는 PostgreSQL을 함께 띄우고 8080 포트를 여는 `compose.local.yaml`을 겹쳐 실행합니다. DB가 준비된 뒤 앱이 시작됩니다.
+
 ```bash
-docker compose up --build
+docker compose -f compose.yaml -f compose.local.yaml up --build
 ```
 
 소스만 제출할 때는 루트 `main.py`가 FastAPI 진입점이며 `requirements.txt`에 의존성이 선언되어 있습니다.

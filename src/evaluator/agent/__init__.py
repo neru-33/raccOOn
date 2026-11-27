@@ -172,7 +172,8 @@ class _RunnerTools:
             result = self.runner.probe_mapping(candidate, documented_operations)
         except ToolError as error:
             if error.code == "invalid_arguments":
-                return tool_error(error.code, "Runner rejected the probe arguments")
+                # The runner explains what to fix; no HTTP probe ran, so the probe budget is unchanged.
+                return tool_error(error.code, str(error))
             return self._execution_failure("probe_mapping")
         self.probe_attempts = result["probe_attempts"]
         if result["status"] == "verified":

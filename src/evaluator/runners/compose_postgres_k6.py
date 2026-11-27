@@ -345,8 +345,8 @@ class ComposePostgresK6Runner:
         operations = self.task.get("operations") or {}
         problem = validate_candidate(candidate, operations)
         if problem:
-            outcome = SequenceResult(ok=False, failed_stage="candidate_schema", message=problem)
-            return self._log.record(candidate, outcome, None)
+            # Rejected before any HTTP request: not a probe attempt, so it uses no probe budget.
+            raise ToolError("invalid_arguments", f"candidate rejected before probing: {problem}")
         capacity = int(self.config["probe"]["event_capacity"])
         transport = UrllibTransport(self._base_url)
         outcome = run_sequence(operations, candidate, transport, self._input_factory(capacity), timeout=10)
