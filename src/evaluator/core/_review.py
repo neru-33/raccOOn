@@ -18,12 +18,18 @@ def _source_path(path: str) -> bool:
     return bool(path) and not path.startswith("/") and "\\" not in path and ".." not in path.split("/")
 
 
-def _file_ref(ref: object) -> bool:
-    return (
-        isinstance(ref, dict) and ref.keys() == {"path", "start_line", "end_line"}
-        and isinstance(ref["path"], str) and _source_path(ref["path"])
-        and all(type(ref[key]) is int and ref[key] >= 1 for key in ("start_line", "end_line"))
-    )
+class InvalidReviewArtifact(ValueError):
+    """A review artifact failed the grading core's contract checks."""
+
+
+def _validate_file_ref(ref: object, field: str) -> None:
+    if not isinstance(ref, dict) or ref.keys() != {"path", "start_line", "end_line"}:
+        raise InvalidReviewArtifact(f"{field} must contain path, start_line, and end_line")
+    if not isinstance(ref["path"], str) or not _source_path(ref["path"]):
+        raise InvalidReviewArtifact(f"{field}.path must be a relative source path using forward slashes")
+    for key in ("start_line", "end_line"):
+        if type(ref[key]) is not int or ref[key] < 1:
+            raise InvalidReviewArtifact(f"{field}.{key} must be a positive integer")
 
 
 def _observation_ref(ref: object) -> bool:
@@ -42,7 +48,6 @@ def _valid_finding(finding: object) -> bool:
         and finding["rating"] in _RATINGS
         and all(isinstance(finding[key], list) for key in ("source_refs", "observation_refs"))
         and (finding["feature_summary"] is None or isinstance(finding["feature_summary"], str))
-        and all(_file_ref(ref) for ref in finding["source_refs"])
         and all(_observation_ref(ref) for ref in finding["observation_refs"])
     )
 
@@ -51,12 +56,11 @@ def _valid_hypothesis(hypothesis: object) -> bool:
     return (
         isinstance(hypothesis, dict) and hypothesis.keys() == {"id", "text", "source_ref"}
         and all(isinstance(hypothesis[key], str) for key in ("id", "text"))
-        and _file_ref(hypothesis["source_ref"])
     )
 
 
-def _valid_review(artifact: dict) -> bool:
-    return (
+def _validate_review_fields(artifact: dict) -> None:
+    if not (
         artifact.keys() == {"schema_version", "run_id", "task_id", "submission_sha256",
                             "model_info", "quality_findings", "hypotheses"}
         and isinstance(model := artifact["model_info"], dict)
@@ -65,9 +69,19 @@ def _valid_review(artifact: dict) -> bool:
         and (model["endpoint_host"] is None or isinstance(model["endpoint_host"], str))
         and isinstance(artifact["quality_findings"], list)
         and isinstance(artifact["hypotheses"], list)
-        and all(_valid_finding(finding) for finding in artifact["quality_findings"])
-        and all(_valid_hypothesis(hypothesis) for hypothesis in artifact["hypotheses"])
-    )
+    ):
+        raise InvalidReviewArtifact("Review artifact fields or model metadata have an invalid shape")
+    for index, finding in enumerate(artifact["quality_findings"]):
+        field = f"quality_findings[{index}]"
+        if not _valid_finding(finding):
+            raise InvalidReviewArtifact(f"{field} has invalid finding fields or observation references")
+        for ref_index, ref in enumerate(finding["source_refs"]):
+            _validate_file_ref(ref, f"{field}.source_refs[{ref_index}]")
+    for index, hypothesis in enumerate(artifact["hypotheses"]):
+        field = f"hypotheses[{index}]"
+        if not _valid_hypothesis(hypothesis):
+            raise InvalidReviewArtifact(f"{field} has invalid hypothesis fields")
+        _validate_file_ref(hypothesis["source_ref"], f"{field}.source_ref")
 
 
 def _source_issue(ref: dict, line_count: Callable[[str], int | None]) -> str | None:
@@ -130,14 +144,20 @@ def _grade_finding(criterion: dict, finding: dict, rows: Rows, line_count: Calla
     }
 
 
-def review_report(task: dict, artifact: dict, rows: Rows, snapshot: Path) -> tuple[list, list] | None:
-    if not _valid_review(artifact):
-        return None
+def review_report(task: dict, artifact: dict, rows: Rows, snapshot: Path) -> tuple[list, list]:
+    _validate_review_fields(artifact)
 
-    findings = {finding["criterion_id"]: finding for finding in artifact["quality_findings"]}
     criteria = task["quality_rubric"]
-    if len(findings) != len(artifact["quality_findings"]) or findings.keys() - {item["id"] for item in criteria}:
-        return None
+    allowed_ids = {item["id"] for item in criteria}
+    findings = {}
+    for index, finding in enumerate(artifact["quality_findings"]):
+        criterion_id = finding["criterion_id"]
+        field = f"quality_findings[{index}].criterion_id"
+        if criterion_id in findings:
+            raise InvalidReviewArtifact(f"{field} duplicates an earlier rubric criterion")
+        if criterion_id not in allowed_ids:
+            raise InvalidReviewArtifact(f"{field} is not an ID in the task rubric")
+        findings[criterion_id] = finding
 
     @cache
     def line_count(path: str) -> int | None:

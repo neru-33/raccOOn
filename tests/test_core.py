@@ -85,6 +85,31 @@ def test_review_metadata_does_not_affect_functional_score(tmp_path: Path) -> Non
     assert report["total_score"] is None
 
 
+@pytest.mark.parametrize(("problem", "message"), [
+    ("unknown_id", "quality_findings[0].criterion_id is not an ID in the task rubric"),
+    ("duplicate_id", "quality_findings[1].criterion_id duplicates an earlier rubric criterion"),
+    ("zero_line", "quality_findings[0].source_refs[0].start_line must be a positive integer"),
+])
+def test_invalid_review_explains_rejection_and_preserves_functional_score(
+    problem: str, message: str, tmp_path: Path,
+) -> None:
+    case = _case("correct", tmp_path)
+    findings = case[3]["review_artifact"]["quality_findings"]
+    if problem == "unknown_id":
+        findings[0]["criterion_id"] = "unknown"
+    elif problem == "duplicate_id":
+        findings[1]["criterion_id"] = findings[0]["criterion_id"]
+    else:
+        findings[0]["source_refs"][0]["start_line"] = 0
+
+    report = evaluate(*case)
+    assert report["base_score"] == 40
+    assert report["review_status"] == "invalid_output"
+    assert report["quality_score"] is None
+    assert report["total_score"] is None
+    assert report["errors"] == [{"code": "review_invalid_output", "stage": "review", "message": message}]
+
+
 def test_execution_failure_preserves_verified_mapping(tmp_path: Path) -> None:
     case = _case("correct", tmp_path)
     case[2]["observations"].update(status="execution_error", error={"stage": "load", "message": "failed"})
