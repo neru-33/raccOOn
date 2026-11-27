@@ -1,7 +1,8 @@
 """Runner interface: starts the submission and records observations.
 
 Return values follow ``contracts/schemas/tools.schema.json`` (start, probe) and
-``observations.schema.json`` / ``mapping.schema.json``.
+``observations.schema.json`` / ``mapping.schema.json``. The ``read_source`` tool
+is not part of the runner; see ``evaluator.snapshot.read_source``.
 """
 
 from __future__ import annotations
@@ -12,15 +13,33 @@ from typing import Any, Protocol
 
 class RunnerSession(Protocol):
     def start(self) -> dict[str, Any]:
-        """Bring up app, database and tools. Returns ``start_submission_result``."""
+        """Bring up the submission and its dependencies. Returns ``start_submission_result``.
+
+        Check the runner's own infrastructure (containers, database reachable by
+        the runner) before waiting for the submission to become ready, and set
+        ``error.cause`` to ``environment`` or ``submission`` accordingly.
+        Inject the variables declared in ``runner_config.app.env`` into the app.
+        """
         ...
 
-    def probe_mapping(self, candidate: dict[str, Any]) -> dict[str, Any]:
-        """Validate and probe a mapping candidate. Returns ``probe_mapping_result``."""
+    def probe_mapping(
+        self,
+        candidate: dict[str, Any],
+        documented_operations: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Validate and probe a mapping candidate. Returns ``probe_mapping_result``.
+
+        ``documented_operations`` holds calls the agent read from the submission's
+        documents; the runner records them in ``mapping.json`` and derives
+        ``probe_status`` from the probe history.
+        """
         ...
 
-    def run_checks(self, mapping_id: str) -> dict[str, Any]:
-        """Reset data and run every required check. Returns an ``observations.json`` object."""
+    def run_checks(self, mapping_id: str | None) -> dict[str, Any]:
+        """Reset data and run every required check. Returns an ``observations.json`` object.
+
+        ``mapping_id`` is None only when the task declares no operations.
+        """
         ...
 
     def mapping_artifact(self) -> dict[str, Any] | None:

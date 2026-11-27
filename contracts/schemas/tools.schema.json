@@ -114,10 +114,18 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["stage", "message"],
+              "required": ["stage", "message", "cause", "log_excerpt"],
               "properties": {
                 "stage": {"type": "string"},
-                "message": {"type": "string"}
+                "message": {"type": "string"},
+                "cause": {
+                  "description": "environment: 실행기 자체 인프라 확인 실패. submission: 인프라는 정상이나 제출물이 기동·준비되지 않음.",
+                  "enum": ["environment", "submission"]
+                },
+                "log_excerpt": {
+                  "description": "제출물 또는 인프라 로그의 끝부분(최대 4,000자), 없으면 null",
+                  "type": ["string", "null"]
+                }
               }
             }
           ]
@@ -131,7 +139,13 @@
       "additionalProperties": false,
       "required": ["candidate"],
       "properties": {
-        "candidate": {"$ref": "mapping-candidate.schema.json"}
+        "candidate": {"$ref": "mapping-candidate.schema.json"},
+        "documented_operations": {
+          "description": "제출물 문서(README 등)에 적힌 호출법을 동작별로 문서에 적힌 그대로 전달한다. candidate와 달라도 된다. 실행기는 마지막으로 받은 값을 mapping.json에 기록하고 시험 이력과 대조해 문서 호출법의 시험 결과를 판정한다.",
+          "type": "object",
+          "propertyNames": {"$ref": "common.schema.json#/$defs/operation_name"},
+          "additionalProperties": {"$ref": "mapping.schema.json#/$defs/documented_call_input"}
+        }
       }
     },
     "probe_mapping_result": {

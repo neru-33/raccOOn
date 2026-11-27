@@ -16,7 +16,7 @@
       "type": ["string", "null"]
     },
     "documented_operations": {
-      "description": "제출 문서에 적힌 호출법과 시험 결과. 시험하지 못한 예시는 untested.",
+      "description": "제출 문서에 적힌 호출법과 시험 결과. 에이전트가 probe_mapping의 documented_operations로 전달한 값을 기록하며, 전달받지 못했으면 빈 객체.",
       "type": "object",
       "propertyNames": {"$ref": "common.schema.json#/$defs/operation_name"},
       "additionalProperties": {"$ref": "#/$defs/documented_call"}
@@ -35,20 +35,36 @@
   },
   "unevaluatedProperties": false,
   "$defs": {
-    "documented_call": {
+    "documented_call_input": {
+      "description": "에이전트가 제출물 문서에서 읽은 호출법. 문서에 적힌 그대로 기록하며 source_ref는 해당 문서의 줄 범위다.",
       "type": "object",
       "additionalProperties": false,
+      "required": ["protocol", "method", "path_template", "source_ref"],
+      "properties": {
+        "protocol": {"const": "http"},
+        "method": {"enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
+        "path_template": {"type": "string"},
+        "query_template": {"type": "object"},
+        "headers_template": {"type": "object"},
+        "body_template": {"type": ["object", "array", "null"]},
+        "source_ref": {"$ref": "common.schema.json#/$defs/file_ref"}
+      }
+    },
+    "documented_call": {
+      "description": "documented_call_input에 실행기가 probe_status를 붙인 기록. 같은 동작에 대해 protocol·method·path_template이 같은 호출을 시험한 이력으로 판정한다. 그 호출이 쓰인 시도가 verified이면 verified, 그 동작에서 실패했으면 failed, 그 외(시험하지 않았거나 앞 동작에서 시도가 끝남)는 untested.",
+      "type": "object",
       "required": ["protocol", "method", "path_template", "source_ref", "probe_status"],
       "properties": {
         "protocol": {"const": "http"},
         "method": {"enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
-        "headers_template": {"type": "object"},
         "path_template": {"type": "string"},
         "query_template": {"type": "object"},
+        "headers_template": {"type": "object"},
         "body_template": {"type": ["object", "array", "null"]},
         "source_ref": {"$ref": "common.schema.json#/$defs/file_ref"},
         "probe_status": {"enum": ["verified", "failed", "untested"]}
-      }
+      },
+      "additionalProperties": false
     },
     "probe_record": {
       "type": "object",

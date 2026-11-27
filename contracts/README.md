@@ -61,14 +61,16 @@ task.json ─┐
 
 ## 모델 도구
 
-| 도구 | 사용 세션 | 인자 | 결과 |
-| --- | --- | --- | --- |
-| `read_source` | 에이전트 | `path` | 파일 내용, 전체 줄 수, 잘림 여부 |
-| `start_submission` | 에이전트 | 없음 | 준비 상태, 실행 중인 제출물에서 얻은 사용법 자료(`discovered`, 예: OpenAPI 문서), 평가 도구 상태 |
-| `probe_mapping` | 에이전트 | `candidate` | `verified` + `mapping_id`, 또는 실패 단계·HTTP 상태 |
-| `run_checks` | 에이전트 | `mapping_id` | 검사 완료 여부와 관측 행 수. 호출 후 세션 종료 |
+평가 에이전트 세션에만 도구를 제공한다. 리뷰 세션은 도구가 없다.
 
-도구 호출이 실패하면 `{"error": {"code", "message"}}`를 돌려준다. `evaluator.contracts.tool_definitions("agent" | "review")`는 참조를 펼친 Chat Completions `tools` 형식의 함수 정의를 만든다. 일부 엔드포인트가 받지 않는 키워드(`pattern`, `propertyNames` 등)는 빼고 보내며, 호스트는 받은 인자를 원래 스키마로 다시 검증한다.
+| 도구 | 구현 위치 | 인자 | 결과 |
+| --- | --- | --- | --- |
+| `read_source` | `evaluator.snapshot.read_source` | `path` | 파일 내용, 전체 줄 수, 잘림 여부 |
+| `start_submission` | 실행기 `start()` | 없음 | 준비 상태, 실행 중인 제출물에서 얻은 사용법 자료(`discovered`, 예: OpenAPI 문서), 평가 도구 상태. 실패 시 원인(`environment`/`submission`)과 로그 발췌 |
+| `probe_mapping` | 실행기 `probe_mapping()` | `candidate`, 선택 `documented_operations` | `verified` + `mapping_id`, 또는 실패 단계·HTTP 상태 |
+| `run_checks` | 실행기 `run_checks()` | `mapping_id` | 검사 완료 여부와 관측 행 수. 호출 후 세션 종료 |
+
+`read_source`는 스냅샷 밖 경로, 절대 경로, `..`, 스냅샷에서 제외된 파일과 비밀 파일을 `path_denied`로 거부한다. 도구 호출이 실패하면 `{"error": {"code", "message"}}`를 돌려준다. `evaluator.contracts.tool_definitions("agent" | "review")`는 참조를 펼친 Chat Completions `tools` 형식의 함수 정의를 만든다. 일부 엔드포인트가 받지 않는 키워드(`pattern`, `propertyNames` 등)는 빼고 보내며, 호스트는 받은 인자를 원래 스키마로 다시 검증한다.
 
 ## 매핑 후보
 
@@ -79,6 +81,16 @@ task.json ─┐
 - `response_fields`의 키는 해당 동작의 `outputs` 이름과 같다. `pointer`는 응답 본문 기준 RFC 6901 JSON Pointer다. `bool` 출력은 `equals`가 있으면 값 비교 결과, 없으면 응답 값 자체가 불리언이어야 한다.
 - `inputs.<이름>.from`이 `<동작>.<출력>`이면 앞 동작의 응답 값을 입력으로 쓴다. 실행기는 동작을 선언 순서대로 호출하고 ID 연결을 확인한다.
 - 실패 단계(`failed_stage`): `candidate_schema`, `request`, `transport`, `status_code`, `response_field`, `id_link`.
+
+### 문서에 적힌 호출법
+
+실행기는 제출물 문서를 읽지 않는다. 에이전트가 README 등에서 읽은 호출법을 `probe_mapping`의 `documented_operations`로 문서에 적힌 그대로 전달하고(시험할 `candidate`와 달라도 된다), 실행기는 마지막으로 받은 값을 `mapping.json`의 `documented_operations`에 기록한다. 각 호출법의 `probe_status`는 같은 동작에서 `protocol`·`method`·`path_template`이 같은 호출을 시험한 이력으로 판정한다.
+
+| `probe_status` | 조건 |
+| --- | --- |
+| `verified` | 그 호출이 쓰인 시도가 `verified` |
+| `failed` | 그 호출이 쓰인 시도가 해당 동작에서 실패(`failed_operation`이 그 동작) |
+| `untested` | 시험하지 않았거나, 앞 동작에서 시도가 끝나 그 동작까지 가지 못함 |
 
 ## 관찰값
 
@@ -94,6 +106,30 @@ task.json ─┐
 | `award_per_round` | `veto_if_any_round`를 먼저 평가해 어느 회차든 모두 만족하면 0점. 아니면 선언된 회차마다 `conditions`를 모두 만족할 때 `points` | `points` × 회차 수 |
 
 조건은 `metric`, `op`(`eq`, `ne`, `gt`, `gte`, `lt`, `lte`), `value`로 쓴다. `bool` 지표에는 `eq`, `ne`만 쓸 수 있다. `score_limits.functional`은 규칙 최대 배점의 합과, `score_limits.quality`는 `quality_rubric`의 `max_points` 합과 같아야 한다. 리포트의 `applied_conditions`에는 평가한 조건과 관측값을 남기며, veto가 성립하면 award 조건은 평가하지 않는다.
+
+## 제출물 실행 규약
+
+실행기가 제출물에 요구하는 조건(기동 방식, 포트, 주입하는 환경 변수)은 `task.json`의 `runner_config.app`에 선언하고, 문제지에도 같은 내용을 안내한다. 실행기는 이 선언대로 제출물을 기동하고 값을 주입한다. 문제지와 실행기가 같은 선언을 따르므로, 규약을 지킨 제출물이 평가 쪽 설정 차이 때문에 실패하지 않는다.
+
+```json
+"app": {
+  "compose_file": "compose.yaml",
+  "service": "app",
+  "port": 8080,
+  "ready_timeout_seconds": 60,
+  "env": [
+    {
+      "name": "DATABASE_URL",
+      "format": "postgresql://<user>:<password>@<host>:<port>/<database>",
+      "description": "평가 환경이 제공하는 테스트 DB 접속 정보"
+    }
+  ]
+}
+```
+
+- `env`에는 이름, 형식, 설명만 적는다. 실제 값은 실행기가 실행마다 만들어 주입하며 설정 파일, 모델 입력, 리포트에 남기지 않는다.
+- `runner_config.database.url_env`는 방향이 반대다. 운영자가 실행기에 외부 DB 접속 정보를 넘기는 환경 변수 이름이다.
+- 실행기는 자체 인프라(컨테이너, 실행기에서 DB 접속)를 먼저 확인한 뒤 제출물의 준비 상태를 기다린다. 인프라가 실패하면 `execution_error`, 인프라는 정상인데 제출물이 기동·준비되지 않으면 `submission_start_failed`로 기록하고 로그 발췌를 남긴다. 두 경우 모두 점수는 보류한다.
 
 ## 실행 검사가 없는 과제
 

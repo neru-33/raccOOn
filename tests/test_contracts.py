@@ -347,3 +347,103 @@ def test_cli_rejects_existing_output_dir(tmp_path: Path) -> None:
     out.mkdir()
     code = cli.main(["run", "--task", str(task), "--submission", str(tmp_path), "--out", str(out)])
     assert code == cli.ExitCode.CONTRACT_ERROR
+
+
+def _tools_validator(def_name: str) -> Draft202012Validator:
+    tools_id = contracts.load_schema("tools.schema.json")["$id"]
+    return Draft202012Validator({"$ref": f"{tools_id}#/$defs/{def_name}"}, registry=REGISTRY)
+
+
+def _documented_inputs(mapping: dict) -> dict:
+    return {
+        op: {k: v for k, v in call.items() if k != "probe_status"}
+        for op, call in mapping["documented_operations"].items()
+    }
+
+
+@pytest.mark.parametrize("variant", ["correct", "oversell", "unresolved"])
+def test_probe_mapping_accepts_documented_operations(variant: str) -> None:
+    mapping = _example(f"mapping.{variant}.json")
+    args = {
+        "candidate": mapping["probe_history"][0]["candidate"],
+        "documented_operations": _documented_inputs(mapping),
+    }
+    _tools_validator("probe_mapping_args").validate(args)
+    (probe,) = [d for d in contracts.tool_definitions("agent") if d["function"]["name"] == "probe_mapping"]
+    Draft202012Validator(probe["function"]["parameters"]).validate(args)
+
+
+def _expected_probe_status(op: str, call: dict, history: list[dict]) -> str:
+    key = (call["protocol"], call["method"], call["path_template"])
+    status = "untested"
+    for record in history:
+        tried = record["candidate"].get(op)
+        if tried is None or (tried["protocol"], tried["method"], tried["path_template"]) != key:
+            continue
+        if record["result"] == "verified":
+            return "verified"
+        if record["failed_operation"] == op:
+            status = "failed"
+    return status
+
+
+@pytest.mark.parametrize("variant", ["correct", "oversell", "unresolved"])
+def test_documented_probe_status_follows_history(variant: str) -> None:
+    mapping = _example(f"mapping.{variant}.json")
+    for op, call in mapping["documented_operations"].items():
+        assert call["probe_status"] == _expected_probe_status(op, call, mapping["probe_history"]), op
+
+
+def _start_error(cause: str) -> dict:
+    return {
+        "status": "error",
+        "discovered": [],
+        "tools": [],
+        "error": {"stage": "readiness", "message": "app not ready in 60s", "cause": cause, "log_excerpt": None},
+    }
+
+
+def test_start_submission_error_requires_cause() -> None:
+    validator = _tools_validator("start_submission_result")
+    validator.validate(_start_error("submission"))
+    validator.validate(_start_error("environment"))
+    doc = _start_error("submission")
+    del doc["error"]["cause"]
+    assert list(validator.iter_errors(doc))
+
+
+def test_report_accepts_submission_start_failed() -> None:
+    def to_start_failure(d: dict) -> None:
+        d.update(
+            run_status="incomplete",
+            mapping_status="not_reached",
+            mapping_id=None,
+            probe_attempts=0,
+            calls=None,
+            base_score=None,
+            rule_results=[],
+            quality_score=None,
+            quality_results=[],
+            total_score=None,
+            review_status="skipped",
+            review_result={"status": "skipped", "review_artifact": None, "error": None},
+            hypothesis_results=[],
+            errors=[
+                {
+                    "code": "submission_start_failed",
+                    "stage": "readiness",
+                    "message": "app not ready in 60s",
+                    "log_excerpt": "KeyError: 'DB_URL'",
+                }
+            ],
+        )
+
+    _validator("report.schema.json").validate(_mutated("report.unresolved.json", to_start_failure))
+
+
+def test_submission_env_declares_names_and_formats_only() -> None:
+    env = _example("task.json")["runner_config"]["app"]["env"]
+    assert env
+    for entry in env:
+        assert set(entry) == {"name", "format", "description"}
+        assert entry["name"].isupper() and entry["name"].replace("_", "").isalnum()
