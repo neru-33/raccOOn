@@ -447,3 +447,41 @@ def test_model_config_uses_dotenv_and_prefers_process_environment(tmp_path, monk
 
     monkeypatch.setattr(cli.models, "load_client", load_client)
     assert isinstance(cli._load_model(), _Model)
+
+
+def test_live_review_adds_model_narrative_to_report_md_and_off_does_not(tmp_path, monkeypatch):
+    task_path = tmp_path / "task.json"
+    task = _example("task")
+    criterion = next(item for item in task["quality_rubric"] if item["id"] == "documentation")
+    task.update(runner_id=None, runner_config={}, operations={}, metrics={}, rules=[], quality_rubric=[criterion])
+    task["score_limits"] = {"functional": 0, "quality": criterion["max_points"]}
+    task_path.write_text(json.dumps(task), encoding="utf-8")
+    narrative_calls = []
+
+    class Model(_Model):
+        def complete(self, messages, tools, response_schema):
+            if response_schema is None:
+                narrative_calls.append(messages)
+                return ModelTurn(content="## 총평\n문서가 충분합니다.\n")
+            finding = {
+                "criterion_id": criterion["id"], "rating": "meets", "reason": "The README documents the example.",
+                "source_refs": [{"path": "README.md", "start_line": 1, "end_line": 1}],
+                "observation_refs": [], "feature_summary": None,
+            }
+            return ModelTurn(content=json.dumps({"quality_findings": [finding], "hypotheses": []}))
+
+    monkeypatch.setattr(cli.models, "load_client", lambda env: Model())
+
+    args, output = _invocation(tmp_path, task_path, mode="live")
+    assert cli.main(args) == cli.ExitCode.OK
+    text = (output / "report.md").read_text(encoding="utf-8")
+    assert "문서가 충분합니다." in text
+    assert f"{criterion['title']} (`documentation`)" in text
+    assert json.loads(narrative_calls[0][1]["content"])["report"]["total_score"] == criterion["points_by_rating"]["meets"]
+
+    (tmp_path / "second").mkdir()
+    args, output = _invocation(tmp_path / "second", task_path, mode="off")
+    narrative_calls.clear()
+    assert cli.main(args) == cli.ExitCode.OK
+    assert narrative_calls == []
+    assert "AI 해설" not in (output / "report.md").read_text(encoding="utf-8")

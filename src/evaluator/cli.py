@@ -186,22 +186,8 @@ def _write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
 
 
-def _write_report(report: dict, output: Path) -> None:
-    try:
-        reporting.write(report, output)
-    except NotImplementedError:
-        # Keep the CLI usable until the Markdown renderer lands.
-        _write_json(output / "report.json", report)
-        lines = ["# Evaluation report", "", f"- Run: `{report['run_status']}`",
-                 f"- Mapping: `{report['mapping_status']}`", f"- Review: `{report['review_status']}`"]
-        for label, score, maximum in (("Functional", "base_score", "max_score"),
-                                      ("Quality", "quality_score", "quality_max_score"),
-                                      ("Total", "total_score", "total_max_score")):
-            value = report[score]
-            lines.append(f"- {label}: {value}/{report[maximum]}" if value is not None else f"- {label}: pending")
-        lines.extend(f"- Error: `{error['code']}`" for error in report["errors"])
-        lines.extend(["", "[Full report](report.json)", ""])
-        (output / "report.md").write_text("\n".join(lines), encoding="utf-8")
+def _write_report(report: dict, output: Path, task: dict, model: models.ModelClient | None) -> None:
+    reporting.write(report, output, task=task, model=model)
 
 
 def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_meta: dict,
@@ -250,6 +236,11 @@ def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_
         if report["base_score"] is None:
             stage.status = "SKIP"
     if report["run_status"] == "graded" and args.review == "live":
+        if model is None:
+            try:
+                model = _load_model()
+            except Exception:
+                model = None  # the review reports this as unavailable
         with display.stage("Review submission quality") as stage:
             review_result = _run_review(task, snapshot_dir, result, model, run_meta)
             report = core.evaluate(task, run_meta, result, review_result, snapshot_dir)
@@ -265,7 +256,8 @@ def _evaluate_run(args: argparse.Namespace, task: dict, snapshot_dir: Path, run_
                 _write_json(args.out / name, artifact)
         if report["review_status"] == "ok":
             _write_json(args.out / "ai_review.json", review_result["review_artifact"])
-        _write_report(report, args.out)
+        narrator = model if args.review == "live" else None
+        _write_report(report, args.out, task, narrator)
     display.summary(report, args.out, review_enabled=args.review == "live")
     return ExitCode.OK if report["run_status"] == "graded" else ExitCode.INCOMPLETE
 
