@@ -9,7 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from ._review import review_report
+from ._review import InvalidReviewArtifact, review_report
 from ._scoring import grade_rules, index_observations, validate_scoring_config as validate_scoring_config
 
 _ENVELOPE = ("schema_version", "run_id", "task_id", "submission_sha256")
@@ -104,17 +104,20 @@ def evaluate(
     review_status = "skipped" if base_score is None else review_result["status"]
     if review_status == "ok":
         artifact = review_result["review_artifact"]
-        if isinstance(artifact, dict) and _same_run(artifact, run_meta):
-            graded_review = review_report(task, artifact, rows, submission_dir)
-            if graded_review is not None:
-                quality_results, hypothesis_results = graded_review
-                if all(item["points_awarded"] is not None for item in quality_results):
-                    quality_score = sum(item["points_awarded"] for item in quality_results)
-                review_artifact = "ai_review.json"
-                model_info = model_info if model_info is not None else artifact["model_info"]
-        if review_artifact is None:
+        try:
+            if not isinstance(artifact, dict):
+                raise InvalidReviewArtifact("Review artifact must be an object")
+            if not _same_run(artifact, run_meta):
+                raise InvalidReviewArtifact("Review artifact metadata does not match the current run")
+            quality_results, hypothesis_results = review_report(task, artifact, rows, submission_dir)
+        except InvalidReviewArtifact as exc:
             review_status = "invalid_output"
-            review_error = _error("review_invalid_output", "review", "Invalid review artifact or run metadata")
+            review_error = _error("review_invalid_output", "review", str(exc))
+        else:
+            if all(item["points_awarded"] is not None for item in quality_results):
+                quality_score = sum(item["points_awarded"] for item in quality_results)
+            review_artifact = "ai_review.json"
+            model_info = model_info if model_info is not None else artifact["model_info"]
     elif review_status in {"invalid_output", "unavailable"}:
         review_error = review_result["error"]
 
