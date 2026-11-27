@@ -10,10 +10,11 @@ import os
 import shutil
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from evaluator import contracts
+from evaluator import cli, contracts
 from evaluator.runners import compose as dc
 from evaluator.runners import open_session
 
@@ -77,6 +78,51 @@ def _session(sub: Path):
 def _project_exists(name: str) -> bool:
     out = dc.run_command(["docker", "compose", "ls", "--all", "--format", "json"], timeout=30)
     return any(p.get("Name") == name for p in json.loads(out or "[]"))
+
+
+@pytest.mark.parametrize(("mode", "expected_score"), [("correct", 40), ("oversell", 16)])
+def test_cli_grades_and_cleans_up_real_runner(tmp_path, monkeypatch, mode, expected_score):
+    submission = _submission(tmp_path, {"APP_MODE": mode})
+    output = tmp_path / "output"
+    model_info = {"client": "test", "endpoint_host": None, "model": "scripted"}
+
+    def orchestrate(task, snapshot, session, model):
+        assert snapshot != submission
+        started = session.start()
+        assert started["status"] == "ready", started
+        probe = session.probe_mapping(GOOD)
+        assert probe["status"] == "verified", probe
+        observations = session.run_checks(probe["mapping_id"])
+        assert observations["status"] == "complete", observations
+        return {
+            "mapping_status": "verified",
+            "mapping_artifact": session.mapping_artifact(),
+            "probe_attempts": probe["probe_attempts"],
+            "observations": observations,
+            "model_info": model_info,
+            "error": None,
+        }
+
+    monkeypatch.setattr(cli.models, "load_client", lambda env: SimpleNamespace(model_info=model_info))
+    monkeypatch.setattr(cli.agent, "orchestrate", orchestrate)
+
+    code = cli.main([
+        "run", "--task", str(TASK_DIR / "task.json"),
+        "--submission", str(submission), "--out", str(output),
+    ])
+
+    report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    assert not _project_exists(dc.project_name(report["run_id"]))
+    assert code == cli.ExitCode.OK, report["errors"]
+    contracts.validate("report.schema.json", report)
+    assert report["base_score"] == expected_score
+    assert report["review_status"] == "off"
+    assert (output / "report.md").is_file()
+    for filename, schema in (("mapping.json", "mapping.schema.json"), ("observations.json", "observations.schema.json")):
+        artifact = json.loads((output / filename).read_text(encoding="utf-8"))
+        contracts.validate(schema, artifact)
+        for key in ("schema_version", "run_id", "task_id", "submission_sha256", "mapping_id"):
+            assert artifact[key] == report[key]
 
 
 @pytest.mark.parametrize(
