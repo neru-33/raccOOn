@@ -26,8 +26,10 @@ Docker Compose로 제출 앱을 띄우고 PostgreSQL을 제공하며, 동시 요
 
 ### 기동 방식 선택
 
-1. `app.compose_file`(예약 과제는 `compose.yaml`)이 있으면 그 파일을 사용한다.
-2. 없고 제출물 루트에 `Dockerfile`이 있으면 `app.service` 이름의 서비스 하나에 `build: .`을 지정한 Compose 파일을 생성한다.
+1. 제출물 루트에 Compose 파일이 있으면 그 파일을 사용한다. `app.compose_file`이 있으면 그것을, 없으면 Docker Compose의 기본 이름(`compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`) 순서로 찾는다.
+   - 앱 서비스는 `app.service` 이름이 있으면 그것, 없으면 소스에서 빌드하는(`build`) 유일한 서비스, 그것도 없으면 DB·캐시·큐 이미지(postgres, mysql, redis 등)가 아닌 유일한 서비스, 서비스가 하나뿐이면 그 서비스를 고른다. 고를 수 없으면 서비스 목록을 남기고 `submission` 실패로 끝난다.
+   - 실행기는 앱 서비스만 `--no-deps`로 띄운다. 제출물 Compose의 다른 서비스(예: 자체 DB)는 띄우지 않고, DB 접속 정보는 실행기가 덮어쓴다.
+2. Compose 파일이 없고 루트에 `Dockerfile`이 있으면 `app.service` 이름의 서비스 하나에 `build: .`을 지정한 Compose 파일을 생성한다.
 3. 두 파일 모두 없으면 Railpack이 소스의 스택과 시작 명령을 판별한다. Docker Buildx로 계획을 빌드하고 생성한 이미지로 앱 서비스를 구성한다. FastAPI의 경우 루트 `main.py`에서 `app`을 노출하고 의존성에 `fastapi`, `uvicorn`을 선언한다. [Railpack FastAPI 지원](https://railpack.com/languages/python/#fastapi)
 
 실행기가 생성하는 파일은 작업 디렉터리에 둔다. 모델은 빌드와 시작 명령에 관여하지 않는다. `observations.json`의 `runner_info.build_mode`에 각각 `compose`, `dockerfile`, `auto`를 기록한다. 실행을 정리할 때 자동 빌드로 생성한 앱 이미지 태그도 삭제한다.
@@ -42,7 +44,7 @@ Windows Docker Desktop에서 `basic` 소스로 측정한 첫 계획 생성은 �
 
 | 서비스 | 내용 |
 | --- | --- |
-| 앱(`app.service`) | `app.database_url_env` 이름으로 DB 접속 URL 주입, `PORT`에 `app.port` 주입, 같은 컨테이너 포트를 `127.0.0.1`의 임의 포트로 공개 |
+| 앱(선택된 앱 서비스) | `app.database_url_env` 이름으로 DB 접속 URL 주입, `PORT`에 `app.port` 주입, 같은 컨테이너 포트를 `127.0.0.1`의 임의 포트로 공개 |
 | `raccoon-db` | `postgres` 도구 이미지, 실행마다 무작위 비밀번호, `pg_isready` 헬스체크. 비어 있는 DB이며 테이블은 제출물이 만든다 |
 | `raccoon-k6` | `k6` 도구 이미지, `tools` 프로필(검사 때만 `docker compose run`으로 실행) |
 
@@ -52,7 +54,7 @@ Windows Docker Desktop에서 `basic` 소스로 측정한 첫 계획 생성은 �
 | --- | --- |
 | `database.mode` | `engine_managed`만 구현되어 있다. `external`은 아직 `environment` 오류로 끝난다 |
 | `tools` | `postgres`, `k6` 항목 필수. k6의 `options.batch`, `options.batchPerHost` 사용 |
-| `app` | `compose_file`, `service`, `port`, `health_path`, `ready_timeout_seconds`, `env`, `database_url_env`(`env`에 선언된 이름 중 하나) |
+| `app` | `compose_file`·`service`(우선 사용할 Compose 파일과 서비스 이름, 없으면 자동 탐색), `port`, `health_path`, `ready_timeout_seconds`, `env`, `database_url_env`(`env`에 선언된 이름 중 하나) |
 | `inputs` | `from`으로 연결되지 않은 동작 입력의 값 출처. `scenario_capacity`(이번 시험·회차의 정원), `unique_user`(요청마다 다른 사용자 ID) |
 | `accounting` | 준비와 집계에 쓰는 논리 동작. 아래 표 |
 | `probe.event_capacity` | 매핑 시험에서 등록할 이벤트의 정원 |

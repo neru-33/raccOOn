@@ -22,8 +22,7 @@
 
 | 항목 | 내용 |
 | --- | --- |
-| 실행 | 저장소 루트의 `compose.yaml`로 실행합니다. 서비스 이름은 `app`이고, DB 서비스는 넣지 않습니다. |
-| 포트 | `app`은 8080 포트에서 HTTP 요청을 받습니다. |
+| 포트 | 서비스는 8080 포트에서 HTTP 요청을 받습니다. |
 | 상태 확인 | `GET /health`는 서비스가 요청을 처리할 준비가 되면 200을 돌려줍니다. |
 | DB | PostgreSQL을 쓸 수 있습니다. 접속 정보는 환경 변수 `DATABASE_URL`(`postgresql://<user>:<password>@<host>:<port>/<database>`)로 주어지며, 처음에는 비어 있습니다. |
 

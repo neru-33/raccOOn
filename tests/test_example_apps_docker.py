@@ -217,3 +217,41 @@ def test_robust_app_idempotency_and_duplicate_user(tmp_path: Path) -> None:
         assert duplicate[0] == 409 and duplicate[2]["type"] == "/problems/already-booked"
     finally:
         session.close()
+
+
+def test_compose_with_another_file_name_service_name_and_own_database(tmp_path: Path) -> None:
+    """A submission's Compose file may use any default name, any app service name, and its own DB service."""
+    snapshot = tmp_path / "basic-own-compose"
+    shutil.copytree(TASK_DIR / "submissions" / "basic", snapshot,
+                    ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache", "compose.yaml"))
+    (snapshot / "docker-compose.yml").write_text(
+        "services:\n"
+        "  api:\n"
+        "    build: .\n"
+        "    environment:\n"
+        "      DATABASE_URL: postgresql://local:local@db:5432/local\n"
+        "    depends_on: [db]\n"
+        "  db:\n"
+        "    image: postgres:17-alpine\n"
+        "    environment:\n"
+        "      POSTGRES_PASSWORD: local\n",
+        encoding="utf-8",
+    )
+    run_meta = {
+        "schema_version": 1,
+        "run_id": f"run-example-own-compose-{uuid.uuid4().hex[:6]}",
+        "task_id": TASK["task_id"],
+        "submission_sha256": "0" * 64,
+    }
+    session = open_session(TASK, TASK_DIR, snapshot, run_meta)
+    try:
+        started = session.start()
+        assert started["status"] == "ready", started
+        assert session.app_service == "api"
+        probe = session.probe_mapping(CANDIDATES["basic"])
+        assert probe["status"] == "verified", probe
+        obs = session.run_checks(probe["mapping_id"])
+    finally:
+        session.close()
+    assert obs["status"] == "complete", obs
+    assert obs["runner_info"]["build_mode"] == "compose"
