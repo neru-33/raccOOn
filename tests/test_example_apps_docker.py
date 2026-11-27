@@ -1,4 +1,4 @@
-"""Run the example apps in examples/ through the compose-postgres-k6 runner.
+"""Run the reservation example submissions through the compose-postgres-k6 runner.
 
 Needs Docker and builds images, so it runs only with RACCOON_DOCKER_TESTS=1.
 """
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 ROOT = contracts.CONTRACTS_DIR.parent
-TASK_DIR = ROOT / "tasks" / "reservation"
+TASK_DIR = ROOT / "examples" / "reservation"
 TASK = json.loads((TASK_DIR / "task.json").read_text(encoding="utf-8"))
 REF = {"path": "README.md", "start_line": 1, "end_line": 1}
 
@@ -67,7 +67,7 @@ CANDIDATES = {
 
 def _session(tmp_path: Path, app: str):
     snapshot = tmp_path / app
-    shutil.copytree(ROOT / "examples" / app, snapshot, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
+    shutil.copytree(TASK_DIR / "submissions" / app, snapshot, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
     run_meta = {
         "schema_version": 1,
         "run_id": f"run-example-{app}-{uuid.uuid4().hex[:6]}",
