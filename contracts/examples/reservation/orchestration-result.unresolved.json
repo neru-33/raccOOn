@@ -30,6 +30,28 @@
       {
         "attempt": 1,
         "candidate": {
+          "create_event": {
+            "protocol": "http",
+            "method": "POST",
+            "path_template": "/events",
+            "query_template": {},
+            "body_template": {
+              "capacity": "{capacity}"
+            },
+            "success_codes": [
+              201
+            ],
+            "response_fields": {
+              "event_id": {
+                "pointer": "/event/id"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 5,
+              "end_line": 9
+            }
+          },
           "create_reservation": {
             "protocol": "http",
             "method": "POST",
@@ -78,6 +100,26 @@
               "start_line": 40,
               "end_line": 52
             }
+          },
+          "get_event": {
+            "protocol": "http",
+            "method": "GET",
+            "path_template": "/events/{event_id}",
+            "query_template": {},
+            "body_template": null,
+            "success_codes": [
+              200
+            ],
+            "response_fields": {
+              "remaining_seats": {
+                "pointer": "/event/remaining"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 5,
+              "end_line": 9
+            }
           }
         },
         "result": "failed",
@@ -90,6 +132,28 @@
       {
         "attempt": 2,
         "candidate": {
+          "create_event": {
+            "protocol": "http",
+            "method": "POST",
+            "path_template": "/events",
+            "query_template": {},
+            "body_template": {
+              "capacity": "{capacity}"
+            },
+            "success_codes": [
+              201
+            ],
+            "response_fields": {
+              "event_id": {
+                "pointer": "/event/id"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 5,
+              "end_line": 9
+            }
+          },
           "create_reservation": {
             "protocol": "http",
             "method": "POST",
@@ -137,6 +201,26 @@
               "path": "src/routes/bookings.py",
               "start_line": 40,
               "end_line": 52
+            }
+          },
+          "get_event": {
+            "protocol": "http",
+            "method": "GET",
+            "path_template": "/events/{event_id}",
+            "query_template": {},
+            "body_template": null,
+            "success_codes": [
+              200
+            ],
+            "response_fields": {
+              "remaining_seats": {
+                "pointer": "/event/remaining"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 5,
+              "end_line": 9
             }
           }
         },

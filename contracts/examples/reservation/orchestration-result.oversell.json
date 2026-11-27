@@ -36,6 +36,28 @@
       }
     },
     "operations": {
+      "create_event": {
+        "protocol": "http",
+        "method": "POST",
+        "path_template": "/sessions",
+        "query_template": {},
+        "body_template": {
+          "seats": "{capacity}"
+        },
+        "success_codes": [
+          201
+        ],
+        "response_fields": {
+          "event_id": {
+            "pointer": "/data/id"
+          }
+        },
+        "source_ref": {
+          "path": "README.md",
+          "start_line": 5,
+          "end_line": 9
+        }
+      },
       "create_reservation": {
         "protocol": "http",
         "method": "POST",
@@ -84,6 +106,26 @@
           "start_line": 24,
           "end_line": 30
         }
+      },
+      "get_event": {
+        "protocol": "http",
+        "method": "GET",
+        "path_template": "/sessions/{event_id}",
+        "query_template": {},
+        "body_template": null,
+        "success_codes": [
+          200
+        ],
+        "response_fields": {
+          "remaining_seats": {
+            "pointer": "/data/available"
+          }
+        },
+        "source_ref": {
+          "path": "README.md",
+          "start_line": 5,
+          "end_line": 9
+        }
       }
     },
     "probe_attempts": 2,
@@ -91,6 +133,28 @@
       {
         "attempt": 1,
         "candidate": {
+          "create_event": {
+            "protocol": "http",
+            "method": "POST",
+            "path_template": "/sessions",
+            "query_template": {},
+            "body_template": {
+              "seats": "{capacity}"
+            },
+            "success_codes": [
+              201
+            ],
+            "response_fields": {
+              "event_id": {
+                "pointer": "/data/id"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 5,
+              "end_line": 9
+            }
+          },
           "create_reservation": {
             "protocol": "http",
             "method": "POST",
@@ -141,6 +205,26 @@
               "start_line": 24,
               "end_line": 30
             }
+          },
+          "get_event": {
+            "protocol": "http",
+            "method": "GET",
+            "path_template": "/sessions/{event_id}",
+            "query_template": {},
+            "body_template": null,
+            "success_codes": [
+              200
+            ],
+            "response_fields": {
+              "remaining_seats": {
+                "pointer": "/data/available"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 5,
+              "end_line": 9
+            }
           }
         },
         "result": "failed",
@@ -153,6 +237,28 @@
       {
         "attempt": 2,
         "candidate": {
+          "create_event": {
+            "protocol": "http",
+            "method": "POST",
+            "path_template": "/sessions",
+            "query_template": {},
+            "body_template": {
+              "seats": "{capacity}"
+            },
+            "success_codes": [
+              201
+            ],
+            "response_fields": {
+              "event_id": {
+                "pointer": "/data/id"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 5,
+              "end_line": 9
+            }
+          },
           "create_reservation": {
             "protocol": "http",
             "method": "POST",
@@ -200,6 +306,26 @@
               "path": "README.md",
               "start_line": 24,
               "end_line": 30
+            }
+          },
+          "get_event": {
+            "protocol": "http",
+            "method": "GET",
+            "path_template": "/sessions/{event_id}",
+            "query_template": {},
+            "body_template": null,
+            "success_codes": [
+              200
+            ],
+            "response_fields": {
+              "remaining_seats": {
+                "pointer": "/data/available"
+              }
+            },
+            "source_ref": {
+              "path": "README.md",
+              "start_line": 5,
+              "end_line": 9
             }
           }
         },

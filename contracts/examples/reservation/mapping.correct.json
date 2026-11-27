@@ -9,31 +9,78 @@
       "protocol": "http",
       "method": "POST",
       "path_template": "/reservations",
-      "body_template": {"eventId": "{event_id}", "userId": "{user_id}"},
-      "source_ref": {"path": "README.md", "start_line": 18, "end_line": 27},
+      "body_template": {
+        "eventId": "{event_id}",
+        "userId": "{user_id}"
+      },
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 18,
+        "end_line": 27
+      },
       "probe_status": "verified"
     },
     "get_reservation": {
       "protocol": "http",
       "method": "GET",
       "path_template": "/reservations/{reservation_id}",
-      "source_ref": {"path": "README.md", "start_line": 29, "end_line": 36},
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 29,
+        "end_line": 36
+      },
       "probe_status": "verified"
     }
   },
   "operations": {
+    "create_event": {
+      "protocol": "http",
+      "method": "POST",
+      "path_template": "/events",
+      "query_template": {},
+      "body_template": {
+        "capacity": "{capacity}"
+      },
+      "success_codes": [
+        201
+      ],
+      "response_fields": {
+        "event_id": {
+          "pointer": "/id"
+        }
+      },
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 5,
+        "end_line": 9
+      }
+    },
     "create_reservation": {
       "protocol": "http",
       "method": "POST",
       "path_template": "/reservations",
       "query_template": {},
-      "body_template": {"eventId": "{event_id}", "userId": "{user_id}"},
-      "success_codes": [201],
-      "response_fields": {
-        "reservation_id": {"pointer": "/id"},
-        "confirmed": {"pointer": "/status", "equals": "CONFIRMED"}
+      "body_template": {
+        "eventId": "{event_id}",
+        "userId": "{user_id}"
       },
-      "source_ref": {"path": "README.md", "start_line": 18, "end_line": 27}
+      "success_codes": [
+        201
+      ],
+      "response_fields": {
+        "reservation_id": {
+          "pointer": "/id"
+        },
+        "confirmed": {
+          "pointer": "/status",
+          "equals": "CONFIRMED"
+        }
+      },
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 18,
+        "end_line": 27
+      }
     },
     "get_reservation": {
       "protocol": "http",
@@ -41,12 +88,43 @@
       "path_template": "/reservations/{reservation_id}",
       "query_template": {},
       "body_template": null,
-      "success_codes": [200],
+      "success_codes": [
+        200
+      ],
       "response_fields": {
-        "reservation_id": {"pointer": "/id"},
-        "confirmed": {"pointer": "/status", "equals": "CONFIRMED"}
+        "reservation_id": {
+          "pointer": "/id"
+        },
+        "confirmed": {
+          "pointer": "/status",
+          "equals": "CONFIRMED"
+        }
       },
-      "source_ref": {"path": "README.md", "start_line": 29, "end_line": 36}
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 29,
+        "end_line": 36
+      }
+    },
+    "get_event": {
+      "protocol": "http",
+      "method": "GET",
+      "path_template": "/events/{event_id}",
+      "query_template": {},
+      "body_template": null,
+      "success_codes": [
+        200
+      ],
+      "response_fields": {
+        "remaining_seats": {
+          "pointer": "/remaining"
+        }
+      },
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 5,
+        "end_line": 9
+      }
     }
   },
   "probe_attempts": 1,
@@ -54,18 +132,54 @@
     {
       "attempt": 1,
       "candidate": {
+        "create_event": {
+          "protocol": "http",
+          "method": "POST",
+          "path_template": "/events",
+          "query_template": {},
+          "body_template": {
+            "capacity": "{capacity}"
+          },
+          "success_codes": [
+            201
+          ],
+          "response_fields": {
+            "event_id": {
+              "pointer": "/id"
+            }
+          },
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 5,
+            "end_line": 9
+          }
+        },
         "create_reservation": {
           "protocol": "http",
           "method": "POST",
           "path_template": "/reservations",
           "query_template": {},
-          "body_template": {"eventId": "{event_id}", "userId": "{user_id}"},
-          "success_codes": [201],
-          "response_fields": {
-            "reservation_id": {"pointer": "/id"},
-            "confirmed": {"pointer": "/status", "equals": "CONFIRMED"}
+          "body_template": {
+            "eventId": "{event_id}",
+            "userId": "{user_id}"
           },
-          "source_ref": {"path": "README.md", "start_line": 18, "end_line": 27}
+          "success_codes": [
+            201
+          ],
+          "response_fields": {
+            "reservation_id": {
+              "pointer": "/id"
+            },
+            "confirmed": {
+              "pointer": "/status",
+              "equals": "CONFIRMED"
+            }
+          },
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 18,
+            "end_line": 27
+          }
         },
         "get_reservation": {
           "protocol": "http",
@@ -73,12 +187,43 @@
           "path_template": "/reservations/{reservation_id}",
           "query_template": {},
           "body_template": null,
-          "success_codes": [200],
+          "success_codes": [
+            200
+          ],
           "response_fields": {
-            "reservation_id": {"pointer": "/id"},
-            "confirmed": {"pointer": "/status", "equals": "CONFIRMED"}
+            "reservation_id": {
+              "pointer": "/id"
+            },
+            "confirmed": {
+              "pointer": "/status",
+              "equals": "CONFIRMED"
+            }
           },
-          "source_ref": {"path": "README.md", "start_line": 29, "end_line": 36}
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 29,
+            "end_line": 36
+          }
+        },
+        "get_event": {
+          "protocol": "http",
+          "method": "GET",
+          "path_template": "/events/{event_id}",
+          "query_template": {},
+          "body_template": null,
+          "success_codes": [
+            200
+          ],
+          "response_fields": {
+            "remaining_seats": {
+              "pointer": "/remaining"
+            }
+          },
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 5,
+            "end_line": 9
+          }
         }
       },
       "result": "verified",

@@ -52,6 +52,16 @@ def get_booking(pool: ConnectionPool, booking_id: str) -> dict | None:
         return repository.find_booking(conn, booking_id)
 
 
+def create_event(pool: ConnectionPool, capacity: int) -> dict:
+    with pool.connection() as conn, conn.transaction():
+        return repository.insert_event(conn, capacity)
+
+
+def get_event(pool: ConnectionPool, event_id: str) -> dict | None:
+    with pool.connection() as conn:
+        return repository.find_event(conn, event_id)
+
+
 def ping(pool: ConnectionPool) -> None:
     with pool.connection(timeout=2) as conn:
         conn.execute("SELECT 1")

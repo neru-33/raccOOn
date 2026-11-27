@@ -97,3 +97,11 @@ def test_errors_use_problem_details(client):
     assert res.status_code == 404
     assert res.headers["content-type"].startswith("application/problem+json")
     assert res.json()["type"] == "/problems/booking-not-found"
+
+
+def test_event_endpoints_report_remaining_seats(client, pool):
+    created = client.post("/v1/events", json={"capacity": 2})
+    assert created.status_code == 201
+    event_id = created.json()["event"]["eventId"]
+    client.post(f"/v1/events/{event_id}/bookings", json={"userId": "u1"})
+    assert client.get(f"/v1/events/{event_id}").json()["event"]["remainingSeats"] == 1

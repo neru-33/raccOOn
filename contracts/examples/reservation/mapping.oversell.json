@@ -9,31 +9,76 @@
       "protocol": "http",
       "method": "POST",
       "path_template": "/reserve",
-      "body_template": {"session": "{event_id}", "member": "{user_id}"},
-      "source_ref": {"path": "README.md", "start_line": 12, "end_line": 22},
+      "body_template": {
+        "session": "{event_id}",
+        "member": "{user_id}"
+      },
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 12,
+        "end_line": 22
+      },
       "probe_status": "failed"
     },
     "get_reservation": {
       "protocol": "http",
       "method": "GET",
       "path_template": "/enrollments/{reservation_id}",
-      "source_ref": {"path": "README.md", "start_line": 24, "end_line": 30},
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 24,
+        "end_line": 30
+      },
       "probe_status": "verified"
     }
   },
   "operations": {
+    "create_event": {
+      "protocol": "http",
+      "method": "POST",
+      "path_template": "/sessions",
+      "query_template": {},
+      "body_template": {
+        "seats": "{capacity}"
+      },
+      "success_codes": [
+        201
+      ],
+      "response_fields": {
+        "event_id": {
+          "pointer": "/data/id"
+        }
+      },
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 5,
+        "end_line": 9
+      }
+    },
     "create_reservation": {
       "protocol": "http",
       "method": "POST",
       "path_template": "/enrollments",
       "query_template": {},
-      "body_template": {"session": "{event_id}", "member": "{user_id}"},
-      "success_codes": [201],
-      "response_fields": {
-        "reservation_id": {"pointer": "/data/reference"},
-        "confirmed": {"pointer": "/data/state", "equals": "accepted"}
+      "body_template": {
+        "session": "{event_id}",
+        "member": "{user_id}"
       },
-      "source_ref": {"openapi_pointer": "/paths/~1enrollments/post"}
+      "success_codes": [
+        201
+      ],
+      "response_fields": {
+        "reservation_id": {
+          "pointer": "/data/reference"
+        },
+        "confirmed": {
+          "pointer": "/data/state",
+          "equals": "accepted"
+        }
+      },
+      "source_ref": {
+        "openapi_pointer": "/paths/~1enrollments/post"
+      }
     },
     "get_reservation": {
       "protocol": "http",
@@ -41,12 +86,43 @@
       "path_template": "/enrollments/{reservation_id}",
       "query_template": {},
       "body_template": null,
-      "success_codes": [200],
+      "success_codes": [
+        200
+      ],
       "response_fields": {
-        "reservation_id": {"pointer": "/data/reference"},
-        "confirmed": {"pointer": "/data/state", "equals": "accepted"}
+        "reservation_id": {
+          "pointer": "/data/reference"
+        },
+        "confirmed": {
+          "pointer": "/data/state",
+          "equals": "accepted"
+        }
       },
-      "source_ref": {"path": "README.md", "start_line": 24, "end_line": 30}
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 24,
+        "end_line": 30
+      }
+    },
+    "get_event": {
+      "protocol": "http",
+      "method": "GET",
+      "path_template": "/sessions/{event_id}",
+      "query_template": {},
+      "body_template": null,
+      "success_codes": [
+        200
+      ],
+      "response_fields": {
+        "remaining_seats": {
+          "pointer": "/data/available"
+        }
+      },
+      "source_ref": {
+        "path": "README.md",
+        "start_line": 5,
+        "end_line": 9
+      }
     }
   },
   "probe_attempts": 2,
@@ -54,18 +130,54 @@
     {
       "attempt": 1,
       "candidate": {
+        "create_event": {
+          "protocol": "http",
+          "method": "POST",
+          "path_template": "/sessions",
+          "query_template": {},
+          "body_template": {
+            "seats": "{capacity}"
+          },
+          "success_codes": [
+            201
+          ],
+          "response_fields": {
+            "event_id": {
+              "pointer": "/data/id"
+            }
+          },
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 5,
+            "end_line": 9
+          }
+        },
         "create_reservation": {
           "protocol": "http",
           "method": "POST",
           "path_template": "/reserve",
           "query_template": {},
-          "body_template": {"session": "{event_id}", "member": "{user_id}"},
-          "success_codes": [201],
-          "response_fields": {
-            "reservation_id": {"pointer": "/data/reference"},
-            "confirmed": {"pointer": "/data/state", "equals": "accepted"}
+          "body_template": {
+            "session": "{event_id}",
+            "member": "{user_id}"
           },
-          "source_ref": {"path": "README.md", "start_line": 12, "end_line": 22}
+          "success_codes": [
+            201
+          ],
+          "response_fields": {
+            "reservation_id": {
+              "pointer": "/data/reference"
+            },
+            "confirmed": {
+              "pointer": "/data/state",
+              "equals": "accepted"
+            }
+          },
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 12,
+            "end_line": 22
+          }
         },
         "get_reservation": {
           "protocol": "http",
@@ -73,12 +185,43 @@
           "path_template": "/enrollments/{reservation_id}",
           "query_template": {},
           "body_template": null,
-          "success_codes": [200],
+          "success_codes": [
+            200
+          ],
           "response_fields": {
-            "reservation_id": {"pointer": "/data/reference"},
-            "confirmed": {"pointer": "/data/state", "equals": "accepted"}
+            "reservation_id": {
+              "pointer": "/data/reference"
+            },
+            "confirmed": {
+              "pointer": "/data/state",
+              "equals": "accepted"
+            }
           },
-          "source_ref": {"path": "README.md", "start_line": 24, "end_line": 30}
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 24,
+            "end_line": 30
+          }
+        },
+        "get_event": {
+          "protocol": "http",
+          "method": "GET",
+          "path_template": "/sessions/{event_id}",
+          "query_template": {},
+          "body_template": null,
+          "success_codes": [
+            200
+          ],
+          "response_fields": {
+            "remaining_seats": {
+              "pointer": "/data/available"
+            }
+          },
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 5,
+            "end_line": 9
+          }
         }
       },
       "result": "failed",
@@ -91,18 +234,52 @@
     {
       "attempt": 2,
       "candidate": {
+        "create_event": {
+          "protocol": "http",
+          "method": "POST",
+          "path_template": "/sessions",
+          "query_template": {},
+          "body_template": {
+            "seats": "{capacity}"
+          },
+          "success_codes": [
+            201
+          ],
+          "response_fields": {
+            "event_id": {
+              "pointer": "/data/id"
+            }
+          },
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 5,
+            "end_line": 9
+          }
+        },
         "create_reservation": {
           "protocol": "http",
           "method": "POST",
           "path_template": "/enrollments",
           "query_template": {},
-          "body_template": {"session": "{event_id}", "member": "{user_id}"},
-          "success_codes": [201],
-          "response_fields": {
-            "reservation_id": {"pointer": "/data/reference"},
-            "confirmed": {"pointer": "/data/state", "equals": "accepted"}
+          "body_template": {
+            "session": "{event_id}",
+            "member": "{user_id}"
           },
-          "source_ref": {"openapi_pointer": "/paths/~1enrollments/post"}
+          "success_codes": [
+            201
+          ],
+          "response_fields": {
+            "reservation_id": {
+              "pointer": "/data/reference"
+            },
+            "confirmed": {
+              "pointer": "/data/state",
+              "equals": "accepted"
+            }
+          },
+          "source_ref": {
+            "openapi_pointer": "/paths/~1enrollments/post"
+          }
         },
         "get_reservation": {
           "protocol": "http",
@@ -110,12 +287,43 @@
           "path_template": "/enrollments/{reservation_id}",
           "query_template": {},
           "body_template": null,
-          "success_codes": [200],
+          "success_codes": [
+            200
+          ],
           "response_fields": {
-            "reservation_id": {"pointer": "/data/reference"},
-            "confirmed": {"pointer": "/data/state", "equals": "accepted"}
+            "reservation_id": {
+              "pointer": "/data/reference"
+            },
+            "confirmed": {
+              "pointer": "/data/state",
+              "equals": "accepted"
+            }
           },
-          "source_ref": {"path": "README.md", "start_line": 24, "end_line": 30}
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 24,
+            "end_line": 30
+          }
+        },
+        "get_event": {
+          "protocol": "http",
+          "method": "GET",
+          "path_template": "/sessions/{event_id}",
+          "query_template": {},
+          "body_template": null,
+          "success_codes": [
+            200
+          ],
+          "response_fields": {
+            "remaining_seats": {
+              "pointer": "/data/available"
+            }
+          },
+          "source_ref": {
+            "path": "README.md",
+            "start_line": 5,
+            "end_line": 9
+          }
         }
       },
       "result": "verified",

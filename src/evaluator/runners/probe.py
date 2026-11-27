@@ -118,9 +118,14 @@ def run_sequence(
     transport: Transport,
     input_value: InputFactory,
     timeout: float,
+    prior_outputs: dict[str, dict[str, Any]] | None = None,
 ) -> SequenceResult:
-    """Call every operation in declaration order, linking ``from`` inputs."""
-    result = SequenceResult(ok=False)
+    """Call every operation in declaration order, linking ``from`` inputs.
+
+    ``prior_outputs`` supplies outputs of operations run earlier (outside this
+    sequence) so that ``from`` links to them resolve.
+    """
+    result = SequenceResult(ok=False, outputs=dict(prior_outputs or {}))
     for op_name, spec in operations.items():
         call = calls[op_name]
         values: dict[str, Any] = {}
@@ -146,7 +151,10 @@ def run_sequence(
             return _fail(result, "transport", op_name, None, f"{request.method} {request.path}: {err}")
         excerpt = response.body[:EXCERPT_CHARS].decode("utf-8", errors="replace")
         if response.status not in call["success_codes"]:
-            stage = "id_link" if linked and response.status == 404 else "status_code"
+            # A 404 on a path that embeds a linked value points at the link (the
+            # resource from the earlier call is not found), not at the route.
+            path_vars = variables_in(call["path_template"])
+            stage = "id_link" if response.status == 404 and path_vars & set(linked) else "status_code"
             return _fail(
                 result, stage, op_name, response.status,
                 f"{request.method} {request.path} returned {response.status}; expected one of {call['success_codes']}",

@@ -22,7 +22,6 @@ python -m pytest
 | 경로 | 내용 |
 | --- | --- |
 | `examples/reservation/task.json` | 예약 과제 설정 |
-| `examples/reservation/fixtures/` | 실행기가 쓰는 DB 스키마 |
 | `examples/reservation/submissions/` | 같은 과제를 서로 다르게 구현한 예시 제출물 |
 
 자세한 내용은 [예약 사용 예제](examples/reservation/README.md)를 참고하세요.

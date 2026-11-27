@@ -65,6 +65,38 @@ CANDIDATES = {
 }
 
 
+def _event_ops(create_path, body, id_ptr, get_path, remaining_ptr):
+    def call(method, path, tpl, code, pointer, output):
+        return {
+            "protocol": "http",
+            "method": method,
+            "path_template": path,
+            "query_template": {},
+            "body_template": tpl,
+            "success_codes": [code],
+            "response_fields": {output: {"pointer": pointer}},
+            "source_ref": REF,
+        }
+
+    return (
+        call("POST", create_path, body, 201, id_ptr, "event_id"),
+        call("GET", get_path, None, 200, remaining_ptr, "remaining_seats"),
+    )
+
+
+EVENT_OPS = {
+    "basic": _event_ops("/events", {"capacity": "{capacity}"}, "/id", "/events/{event_id}", "/remaining"),
+    "local-lock": _event_ops("/sessions", {"seats": "{capacity}"}, "/data/id", "/sessions/{event_id}",
+                             "/data/available"),
+    "robust": _event_ops("/v1/events", {"capacity": "{capacity}"}, "/event/eventId", "/v1/events/{event_id}",
+                         "/event/remainingSeats"),
+}
+CANDIDATES = {
+    app: {"create_event": EVENT_OPS[app][0], **ops, "get_event": EVENT_OPS[app][1]}
+    for app, ops in CANDIDATES.items()
+}
+
+
 def _session(tmp_path: Path, app: str):
     snapshot = tmp_path / app
     shutil.copytree(TASK_DIR / "submissions" / app, snapshot, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
@@ -137,8 +169,9 @@ def test_robust_app_idempotency_and_duplicate_user(tmp_path: Path) -> None:
     session = _session(tmp_path, "robust")
     try:
         assert session.start()["status"] == "ready"
-        event_id = session._seed_event("idem", 5)
-        base, path = session._base_url, f"/v1/events/{event_id}/bookings"
+        base = session._base_url
+        event_id = _post(base, "/v1/events", {"capacity": 5}, {})[2]["event"]["eventId"]
+        path = f"/v1/events/{event_id}/bookings"
         key = {"Idempotency-Key": str(uuid.uuid4())}
 
         first = _post(base, path, {"userId": "u1"}, key)

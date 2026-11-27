@@ -1,10 +1,10 @@
 # 예약 API
 
-정원이 있는 이벤트의 좌석을 예약하고, 예약 상태를 조회하는 API입니다.
+정원이 있는 이벤트를 등록하고, 좌석을 예약하고, 예약 상태와 남은 자리를 조회하는 API입니다.
 
 ## 실행
 
-평가 환경은 `DATABASE_URL`로 PostgreSQL 접속 정보를 주입하고 `events`, `reservations` 테이블을 미리 만들어 둡니다.
+`DATABASE_URL`로 PostgreSQL 접속 정보를 받습니다. 앱이 시작할 때 필요한 테이블(`events`, `reservations`)을 만듭니다.
 
 ```bash
 docker compose up --build
@@ -14,19 +14,46 @@ docker compose up --build
 
 ## API
 
+### 이벤트 등록
+
+```http
+POST /events
+Content-Type: application/json
+
+{"capacity": 100}
+```
+
+```http
+201 Created
+
+{"id": "0b7e...", "capacity": 100, "remaining": 100}
+```
+
+### 이벤트 조회
+
+```http
+GET /events/{id}
+```
+
+```http
+200 OK
+
+{"id": "0b7e...", "capacity": 100, "remaining": 99}
+```
+
 ### 예약 생성
 
 ```http
 POST /reservations
 Content-Type: application/json
 
-{"eventId": "evt-1", "userId": "user-1"}
+{"eventId": "0b7e...", "userId": "user-1"}
 ```
 
 ```http
 201 Created
 
-{"id": "6f1c...", "eventId": "evt-1", "userId": "user-1", "status": "CONFIRMED"}
+{"id": "6f1c...", "eventId": "0b7e...", "userId": "user-1", "status": "CONFIRMED"}
 ```
 
 정원이 찼으면 `409 Conflict`, 이벤트가 없으면 `404 Not Found`를 돌려줍니다.
@@ -40,7 +67,7 @@ GET /reservations/{id}
 ```http
 200 OK
 
-{"id": "6f1c...", "eventId": "evt-1", "userId": "user-1", "status": "CONFIRMED"}
+{"id": "6f1c...", "eventId": "0b7e...", "userId": "user-1", "status": "CONFIRMED"}
 ```
 
 ## 동시성

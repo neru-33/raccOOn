@@ -58,6 +58,26 @@ GOOD = {
 }
 
 
+def _event_call(method, path, body, code, pointer, output):
+    return {
+        "protocol": "http",
+        "method": method,
+        "path_template": path,
+        "query_template": {},
+        "body_template": body,
+        "success_codes": [code],
+        "response_fields": {output: {"pointer": pointer}},
+        "source_ref": {"path": "app.py", "start_line": 1, "end_line": 1},
+    }
+
+
+GOOD = {
+    "create_event": _event_call("POST", "/events", {"capacity": "{capacity}"}, 201, "/event/id", "event_id"),
+    **GOOD,
+    "get_event": _event_call("GET", "/events/{event_id}", None, 200, "/event/remaining", "remaining_seats"),
+}
+
+
 def _submission(tmp_path: Path, env: dict[str, str]) -> Path:
     sub = tmp_path / "submission"
     shutil.copytree(APP_DIR, sub)
