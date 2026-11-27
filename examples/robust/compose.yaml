@@ -1,0 +1,5 @@
+services:
+  app:
+    build: .
+    environment:
+      WEB_CONCURRENCY: "4"

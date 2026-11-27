@@ -1,7 +1,9 @@
 -- Shared schema for the reservation example apps.
 -- The runner applies this file before starting the app and resets the data
 -- before each probe and check round. The example apps must not create or
--- alter these tables; they only read and write rows.
+-- alter these tables; they only read and write rows. An app may create its
+-- own additional tables (for example, idempotency records); the runner does
+-- not reset or read them.
 
 CREATE TABLE IF NOT EXISTS events (
     id        TEXT PRIMARY KEY,

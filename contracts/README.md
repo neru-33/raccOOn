@@ -29,7 +29,7 @@
 
 `orchestration-result.<실행>.json`은 코어에 들어가는 `orchestration_result`이고, `ai-review.<실행>.json`과 함께 같은 실행의 `report.<실행>.json`을 재현하는 입력이다. 코드 위치 확인에는 스냅샷 파일이 필요하므로 코어 테스트는 인용된 경로와 줄 수를 갖춘 고정 스냅샷을 함께 둔다(`evidence-gap`에서는 `tests/test_capacity.py`가 40줄).
 
-`fixtures/schema.sql`은 예약 예제 앱 두 개가 공유하는 DB 스키마다. 실행기가 기동 전에 적용하고 회차마다 초기화·시드·확정 건수 조회에 쓴다(`runner_config.fixtures`). 예제 앱 실행을 위한 조건이며, 응시자가 설계할 저장 구조를 정하는 것은 아니다.
+`fixtures/schema.sql`은 예약 예제 앱(`examples/`)이 공유하는 DB 스키마다. 실행기가 기동 전에 적용하고 회차마다 초기화·시드·확정 건수 조회에 쓴다(`runner_config.fixtures`). 앱은 공유 테이블(`events`, `reservations`)을 만들거나 바꾸지 않고, 필요하면 자기 보조 테이블(예: 멱등키 기록)을 따로 만든다. 실행기는 보조 테이블을 초기화하거나 읽지 않는다. 예제 앱 실행을 위한 조건이며, 응시자가 설계할 저장 구조를 정하는 것은 아니다.
 
 ## 공통 봉투
 
