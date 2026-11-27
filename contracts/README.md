@@ -87,9 +87,9 @@ task.json ─┐
 `candidate`는 논리 동작 이름을 키로 갖고 `task.json.operations`의 모든 동작을 포함한다. 호출법은 `protocol`로 구분하며 v1은 `http`만 정의한다. 다른 호출 방식은 `mapping-candidate.schema.json`에 정의를 추가하고 그 방식을 지원하는 실행기를 등록해 확장한다.
 
 - `path_template`은 `/`로 시작하는 상대 경로다. 스킴과 호스트는 쓸 수 없다. 경로 변수 `{이름}`은 URL 인코딩한다.
-- `query_template`, `headers_template`(선택), `body_template`의 문자열 값 전체가 `"{이름}"`이면 변수의 원래 타입으로 치환하고, 문자열 일부에 쓰이면 문자열로 치환한다. 변수는 해당 동작의 `inputs`에 선언된 것만 쓸 수 있다.
+- `query_template`, `headers_template`(선택), `body_template`의 문자열 값 전체가 `"{이름}"`이면 변수의 원래 타입으로 치환하고, 문자열 일부에 쓰이면 문자열로 치환한다. 변수는 해당 동작의 `inputs`에 선언된 것만 쓸 수 있다. `{{이름}}`, `${이름}`, `{a.b}`처럼 변수 형식이 아닌 자리표시자는 쓸 수 없다.
 - `response_fields`의 키는 해당 동작의 `outputs` 이름과 같다. `pointer`는 응답 본문 기준 RFC 6901 JSON Pointer다. `bool` 출력은 `equals`가 있으면 값 비교 결과, 없으면 응답 값 자체가 불리언이어야 한다.
-- `inputs.<이름>.from`이 `<동작>.<출력>`이면 앞 동작의 응답 값을 입력으로 쓴다. 실행기는 동작을 선언 순서대로 호출하고 ID 연결을 확인한다.
+- `inputs.<이름>.from`이 `<동작>.<출력>`이면 앞 동작의 응답 값을 입력으로 쓴다. `from`으로 연결된 입력은 그 동작의 템플릿에 변수로 써야 한다. 실행기는 동작을 선언 순서대로 호출하고 ID 연결을 확인한다.
 - 실패 단계(`failed_stage`): `candidate_schema`, `request`, `transport`, `status_code`, `response_field`, `id_link`.
 
 ### 문서에 적힌 호출법

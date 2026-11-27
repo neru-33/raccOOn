@@ -93,7 +93,7 @@ Windows Docker Desktop에서 `basic` 소스로 측정한 첫 계획 생성은 �
 | --- | --- |
 | `not_started` | `start()`가 성공하기 전에 호출 |
 | `unknown_mapping` | 이번 실행에서 확인되지 않은 `mapping_id`로 `run_checks` 호출 |
-| `invalid_arguments` | `documented_operations`가 객체가 아니거나, 후보가 실행할 수 없는 형태(동작 누락, 절대 URL, 선언되지 않은 변수 등) |
+| `invalid_arguments` | `documented_operations`가 객체가 아니거나, 후보가 실행할 수 없는 형태(동작 누락, 절대 URL, 선언되지 않은 변수, 형식에 맞지 않는 자리표시자, 쓰지 않은 연결 입력 등) |
 
 실행할 수 없는 후보는 HTTP 요청을 보내기 전에 거절하므로 시험 횟수에 포함하지 않는다. 예외 메시지에 거절 이유가 담기고, 에이전트는 이를 `invalid_arguments` 도구 오류로 모델에 돌려준다.
 
