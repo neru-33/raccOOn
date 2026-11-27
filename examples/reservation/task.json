@@ -206,12 +206,12 @@
     {
       "id": "concurrent.single_confirmation",
       "type": "award_per_round",
-      "description": "정원 1인 이벤트에 동시 요청 50건, 회차마다 확정 1건",
+      "description": "정원 1인 이벤트에 동시 요청 50건. 어느 회차든 확정 응답이 2건 이상이면 0점, 아니면 회차마다 확정 응답 1건과 앱이 보고한 확정 1건일 때 배점",
       "test_id": "reservation.concurrent",
       "points": 8,
       "veto_if_any_round": [
         {
-          "metric": "persisted_confirmed",
+          "metric": "confirmed_responses",
           "op": "gte",
           "value": 2
         }

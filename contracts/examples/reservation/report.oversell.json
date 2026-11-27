@@ -193,7 +193,7 @@
         {
           "kind": "veto",
           "round": 1,
-          "metric": "persisted_confirmed",
+          "metric": "confirmed_responses",
           "op": "gte",
           "value": 2,
           "observed": 1,
@@ -202,7 +202,7 @@
         {
           "kind": "veto",
           "round": 2,
-          "metric": "persisted_confirmed",
+          "metric": "confirmed_responses",
           "op": "gte",
           "value": 2,
           "observed": 2,
@@ -211,7 +211,7 @@
         {
           "kind": "veto",
           "round": 3,
-          "metric": "persisted_confirmed",
+          "metric": "confirmed_responses",
           "op": "gte",
           "value": 2,
           "observed": 2,

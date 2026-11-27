@@ -402,6 +402,13 @@ class ComposePostgresK6Runner:
             "runner_info": {
                 "runner_id": RUNNER_ID,
                 "database_mode": self.config["database"]["mode"],
+                # The persisted count comes from the submission's own API, not from the database.
+                "count_source": {
+                    "kind": "api",
+                    "operation": self.accounting["count_operation"],
+                    "output": self.accounting["count_output"],
+                    "mode": self.accounting["count_mode"],
+                },
                 "tools": [
                     {"id": t["id"], "version": t["version"] or "unknown"} for t in self._tool_status(True)
                 ],

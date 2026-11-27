@@ -64,6 +64,7 @@ Docker Compose로 제출 앱을 띄우고 PostgreSQL을 제공하며, 동시 요
 
 **`concurrent_burst`**: 회차마다 `setup_operation`으로 정원 `event_capacity`인 대상을 만들고, `reserve_operation`을 `requests`건 한 번에 보낸다(k6 `http.batch`). 응답 중 `success_codes`에 들고 `confirmed_output`이 확정으로 해석된 수를 `response_metric`, 모든 응답을 받은 뒤 `count_operation`으로 계산한 확정 건수를 `persisted_metric`에 기록한다.
 
+- `response_metric`은 실행기가 응답을 직접 센 값이고, `persisted_metric`은 **제출물이 API로 보고한 값**이다. 제출물은 남은 자리를 0 아래로 보여 주지 않는 식으로 실제보다 적게 보고할 수 있다. 그래서 정원 초과를 0점 처리하는 규칙은 `response_metric`을 기준으로 두고, `persisted_metric`은 회차별 일치 확인에 쓴다. 집계 출처는 `observations.json`의 `runner_info.count_source`에 남는다.
 - 한 요청이라도 응답이 없거나 시간 초과면 늦은 커밋 가능성 때문에 집계를 쓰지 않고 그 회차를 실행 오류(`load_no_response`)로 남긴다.
 - 준비나 집계 동작이 실패하면 그 회차는 실행 오류(`setup`, `count`)다.
 
