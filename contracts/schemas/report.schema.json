@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/neru-33/raccOOn/contracts/v1/report.schema.json",
+  "title": "채점 리포트 report.json",
+  "description": "평가 코어가 작성하고 리포트 모듈이 그대로 JSON·Markdown으로 기록한다.",
+  "type": "object",
+  "allOf": [{"$ref": "common.schema.json#/$defs/envelope"}],
+  "required": [
+    "run_status",
+    "mapping_status",
+    "mapping_id",
+    "probe_attempts",
+    "calls",
+    "base_score",
+    "max_score",
+    "rule_results",
+    "quality_score",
+    "quality_max_score",
+    "quality_results",
+    "total_score",
+    "total_max_score",
+    "review_status",
+    "review_result",
+    "hypothesis_results",
+    "model_info",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": true,
+    "run_id": true,
+    "task_id": true,
+    "submission_sha256": true,
+    "run_status": {"enum": ["graded", "incomplete"]},
+    "mapping_status": {"$ref": "common.schema.json#/$defs/mapping_status"},
+    "mapping_id": {"type": ["string", "null"]},
+    "probe_attempts": {"type": "integer", "minimum": 0},
+    "calls": {
+      "description": "문서에 적힌 호출법과 확인된 호출법. 매핑 시험을 시작하지 않았으면 null.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["documented_operations", "operations"],
+          "properties": {
+            "documented_operations": {
+              "type": "object",
+              "additionalProperties": {"$ref": "mapping.schema.json#/$defs/documented_call"}
+            },
+            "operations": {
+              "type": "object",
+              "additionalProperties": {"$ref": "mapping-candidate.schema.json#/$defs/operation_call"}
+            }
+          }
+        }
+      ]
+    },
+    "base_score": {
+      "description": "기능 점수. 채점하지 못하면 null.",
+      "type": ["integer", "null"]
+    },
+    "max_score": {
+      "description": "기능 만점",
+      "type": "integer",
+      "minimum": 0
+    },
+    "rule_results": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/rule_result"}
+    },
+    "quality_score": {
+      "description": "품질 점수. 리뷰가 없거나 한 항목이라도 보류되면 null.",
+      "type": ["integer", "null"]
+    },
+    "quality_max_score": {"type": "integer", "minimum": 0},
+    "quality_results": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/quality_result"}
+    },
+    "total_score": {
+      "description": "base_score와 quality_score가 모두 정수일 때만 합계, 아니면 null.",
+      "type": ["integer", "null"]
+    },
+    "total_max_score": {"type": "integer", "minimum": 0},
+    "review_status": {"$ref": "common.schema.json#/$defs/review_status"},
+    "review_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "review_artifact", "error"],
+      "properties": {
+        "status": {"$ref": "common.schema.json#/$defs/review_status"},
+        "review_artifact": {
+          "description": "유효한 리뷰가 있으면 출력 디렉터리 기준 파일 이름(ai_review.json), 없으면 null.",
+          "type": ["string", "null"]
+        },
+        "error": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "common.schema.json#/$defs/error"}
+          ]
+        }
+      }
+    },
+    "hypothesis_results": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/hypothesis_result"}
+    },
+    "model_info": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "common.schema.json#/$defs/model_info"}
+      ]
+    },
+    "errors": {
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/error"}
+    }
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "applied_condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "round", "metric", "op", "value", "observed", "passed"],
+      "properties": {
+        "kind": {"enum": ["award", "veto"]},
+        "round": {"type": "integer", "minimum": 1},
+        "metric": {"$ref": "common.schema.json#/$defs/metric_name"},
+        "op": {"$ref": "common.schema.json#/$defs/comparison_op"},
+        "value": {"$ref": "common.schema.json#/$defs/metric_value"},
+        "observed": {"$ref": "common.schema.json#/$defs/metric_value"},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "rule_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "points_awarded", "points_available", "applied_conditions", "evidence"],
+      "properties": {
+        "rule_id": {"$ref": "common.schema.json#/$defs/identifier"},
+        "points_awarded": {"type": "integer", "minimum": 0},
+        "points_available": {"type": "integer", "minimum": 0},
+        "applied_conditions": {
+          "description": "평가한 조건과 관측값. veto가 성립하면 award 조건은 평가하지 않는다.",
+          "type": "array",
+          "items": {"$ref": "#/$defs/applied_condition"}
+        },
+        "evidence": {
+          "description": "배점에 사용한 관측 행(배점 당시 지표 포함)",
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/observation_row"}
+        }
+      }
+    },
+    "observation_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "observed_value"],
+      "properties": {
+        "ref": {"$ref": "common.schema.json#/$defs/observation_ref"},
+        "observed_value": {"$ref": "common.schema.json#/$defs/metric_value"}
+      }
+    },
+    "quality_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "criterion_id",
+        "status",
+        "rating",
+        "points_awarded",
+        "max_points",
+        "reason",
+        "source_refs",
+        "observation_evidence",
+        "references",
+        "feature_summary",
+        "verification_level",
+        "issues"
+      ],
+      "properties": {
+        "criterion_id": {"$ref": "common.schema.json#/$defs/identifier"},
+        "status": {
+          "description": "accepted: 참조 확인 후 배점. insufficient_evidence: 참조 미확인·판정 누락으로 보류. not_applicable: 해당 없음 정책 적용.",
+          "enum": ["accepted", "insufficient_evidence", "not_applicable"]
+        },
+        "rating": {
+          "description": "모델이 제안한 판정. 판정이 없으면 null.",
+          "oneOf": [{"type": "null"}, {"$ref": "common.schema.json#/$defs/rating"}]
+        },
+        "points_awarded": {"type": ["integer", "null"]},
+        "max_points": {"type": "integer", "minimum": 0},
+        "reason": {"type": ["string", "null"]},
+        "source_refs": {
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/file_ref"}
+        },
+        "observation_evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/observation_evidence"}
+        },
+        "references": {
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/reference_summary"}
+        },
+        "feature_summary": {"type": ["string", "null"]},
+        "verification_level": {
+          "description": "extra_feature 항목에서만 값을 가진다.",
+          "enum": [null, "static_only", "runtime_verified"]
+        },
+        "issues": {
+          "description": "근거 확인에서 발견한 문제(없는 회차·지표, 스냅샷에 없는 코드 위치, 조회하지 않은 문서 ID 등)",
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "hypothesis_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hypothesis_id", "status", "text", "source_ref", "references", "reason"],
+      "properties": {
+        "hypothesis_id": {"type": "string"},
+        "status": {
+          "description": "hypothesis: 코드 위치와 이번 세션의 문서 조회가 확인됨. insufficient_evidence: 확인 실패.",
+          "enum": ["hypothesis", "insufficient_evidence"]
+        },
+        "text": {"type": "string"},
+        "source_ref": {"$ref": "common.schema.json#/$defs/file_ref"},
+        "references": {
+          "type": "array",
+          "items": {"$ref": "common.schema.json#/$defs/reference_summary"}
+        },
+        "reason": {
+          "description": "insufficient_evidence일 때 사유, 아니면 null",
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

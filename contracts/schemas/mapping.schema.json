@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/neru-33/raccOOn/contracts/v1/mapping.schema.json",
+  "title": "매핑 기록 mapping.json",
+  "description": "실행기가 작성한다. 매핑 시험을 시작한 경우에만 생성된다.",
+  "type": "object",
+  "allOf": [{"$ref": "common.schema.json#/$defs/envelope"}],
+  "required": ["mapping_id", "documented_operations", "operations", "probe_attempts", "probe_history"],
+  "properties": {
+    "schema_version": true,
+    "run_id": true,
+    "task_id": true,
+    "submission_sha256": true,
+    "mapping_id": {
+      "description": "확인된 매핑 ID. 확인 실패 시 null.",
+      "type": ["string", "null"]
+    },
+    "documented_operations": {
+      "description": "제출 문서에 적힌 호출법과 시험 결과. 시험하지 못한 예시는 untested.",
+      "type": "object",
+      "propertyNames": {"$ref": "common.schema.json#/$defs/operation_name"},
+      "additionalProperties": {"$ref": "#/$defs/documented_call"}
+    },
+    "operations": {
+      "description": "확인돼 검사에 사용하는 호출법. 확인 실패 시 빈 객체.",
+      "type": "object",
+      "propertyNames": {"$ref": "common.schema.json#/$defs/operation_name"},
+      "additionalProperties": {"$ref": "mapping-candidate.schema.json#/$defs/operation_call"}
+    },
+    "probe_attempts": {"type": "integer", "minimum": 0},
+    "probe_history": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/probe_record"}
+    }
+  },
+  "unevaluatedProperties": false,
+  "$defs": {
+    "documented_call": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "method", "path_template", "source_ref", "probe_status"],
+      "properties": {
+        "protocol": {"const": "http"},
+        "method": {"enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]},
+        "headers_template": {"type": "object"},
+        "path_template": {"type": "string"},
+        "query_template": {"type": "object"},
+        "body_template": {"type": ["object", "array", "null"]},
+        "source_ref": {"$ref": "common.schema.json#/$defs/file_ref"},
+        "probe_status": {"enum": ["verified", "failed", "untested"]}
+      }
+    },
+    "probe_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempt",
+        "candidate",
+        "result",
+        "failed_stage",
+        "failed_operation",
+        "http_status",
+        "message",
+        "mapping_id"
+      ],
+      "properties": {
+        "attempt": {"type": "integer", "minimum": 1},
+        "candidate": {"$ref": "mapping-candidate.schema.json"},
+        "result": {"enum": ["verified", "failed"]},
+        "failed_stage": {"$ref": "#/$defs/probe_stage"},
+        "failed_operation": {"type": ["string", "null"]},
+        "http_status": {"type": ["integer", "null"]},
+        "message": {"type": ["string", "null"]},
+        "mapping_id": {"type": ["string", "null"]}
+      }
+    },
+    "probe_stage": {
+      "description": "candidate_schema: 후보 형식 오류. request: 템플릿 치환 실패. transport: 연결 오류·시간 초과. status_code: success_codes 외 응답. response_field: 포인터 해석 실패 또는 타입 불일치. id_link: 동작 간 ID 연결 불일치.",
+      "enum": [null, "candidate_schema", "request", "transport", "status_code", "response_field", "id_link"]
+    }
+  }
+}

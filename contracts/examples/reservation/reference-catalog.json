@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "references": [
+    {
+      "id": "pg16-transaction-iso",
+      "technology": "PostgreSQL",
+      "version": "16",
+      "section_title": "13.2. Transaction Isolation",
+      "url": "https://www.postgresql.org/docs/16/transaction-iso.html",
+      "text": "예시 카탈로그 항목. 실제 카탈로그에는 출제자가 해당 버전 공식 문서 절의 본문을 넣는다."
+    },
+    {
+      "id": "pg16-explicit-locking",
+      "technology": "PostgreSQL",
+      "version": "16",
+      "section_title": "13.3. Explicit Locking",
+      "url": "https://www.postgresql.org/docs/16/explicit-locking.html",
+      "text": "예시 카탈로그 항목. 실제 카탈로그에는 출제자가 해당 버전 공식 문서 절의 본문을 넣는다."
+    }
+  ]
+}

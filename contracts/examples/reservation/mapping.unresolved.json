@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "run_id": "run-20261127T143000Z-0a9b8c",
+  "task_id": "reservation-v1",
+  "submission_sha256": "27a888c9d5e6c6c2d1530d15680651f4eefc9a98aaba319953362e3cf5a24996",
+  "mapping_id": null,
+  "documented_operations": {
+    "create_reservation": {
+      "protocol": "http",
+      "method": "POST",
+      "path_template": "/bookings",
+      "body_template": {"event": "{event_id}", "user": "{user_id}"},
+      "source_ref": {"path": "README.md", "start_line": 10, "end_line": 16},
+      "probe_status": "failed"
+    }
+  },
+  "operations": {},
+  "probe_attempts": 2,
+  "probe_history": [
+    {
+      "attempt": 1,
+      "candidate": {
+        "create_reservation": {
+          "protocol": "http",
+          "method": "POST",
+          "path_template": "/bookings",
+          "query_template": {},
+          "body_template": {"event": "{event_id}", "user": "{user_id}"},
+          "success_codes": [201],
+          "response_fields": {
+            "reservation_id": {"pointer": "/id"},
+            "confirmed": {"pointer": "/confirmed"}
+          },
+          "source_ref": {"path": "README.md", "start_line": 10, "end_line": 16}
+        },
+        "get_reservation": {
+          "protocol": "http",
+          "method": "GET",
+          "path_template": "/bookings/{reservation_id}",
+          "query_template": {},
+          "body_template": null,
+          "success_codes": [200],
+          "response_fields": {
+            "reservation_id": {"pointer": "/id"},
+            "confirmed": {"pointer": "/confirmed"}
+          },
+          "source_ref": {"path": "src/routes/bookings.py", "start_line": 40, "end_line": 52}
+        }
+      },
+      "result": "failed",
+      "failed_stage": "response_field",
+      "failed_operation": "create_reservation",
+      "http_status": 201,
+      "message": "pointer /id did not resolve in create_reservation response",
+      "mapping_id": null
+    },
+    {
+      "attempt": 2,
+      "candidate": {
+        "create_reservation": {
+          "protocol": "http",
+          "method": "POST",
+          "path_template": "/bookings",
+          "query_template": {},
+          "body_template": {"event": "{event_id}", "user": "{user_id}"},
+          "success_codes": [201],
+          "response_fields": {
+            "reservation_id": {"pointer": "/booking/id"},
+            "confirmed": {"pointer": "/booking/confirmed"}
+          },
+          "source_ref": {"path": "src/routes/bookings.py", "start_line": 18, "end_line": 38}
+        },
+        "get_reservation": {
+          "protocol": "http",
+          "method": "GET",
+          "path_template": "/bookings/{reservation_id}",
+          "query_template": {},
+          "body_template": null,
+          "success_codes": [200],
+          "response_fields": {
+            "reservation_id": {"pointer": "/booking/id"},
+            "confirmed": {"pointer": "/booking/confirmed"}
+          },
+          "source_ref": {"path": "src/routes/bookings.py", "start_line": 40, "end_line": 52}
+        }
+      },
+      "result": "failed",
+      "failed_stage": "id_link",
+      "failed_operation": "get_reservation",
+      "http_status": 404,
+      "message": "GET /bookings/{reservation_id} with id from create_reservation returned 404",
+      "mapping_id": null
+    }
+  ]
+}

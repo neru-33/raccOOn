@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/neru-33/raccOOn/contracts/v1/observations.schema.json",
+  "title": "실행 기록 observations.json",
+  "description": "실행기만 작성한다. test_id + round는 고유하다. status가 complete이면 task.json.metrics에 선언된 모든 회차·지표가 선언된 타입으로 있어야 한다.",
+  "type": "object",
+  "allOf": [
+    {"$ref": "common.schema.json#/$defs/envelope"},
+    {
+      "if": {"properties": {"status": {"const": "execution_error"}}},
+      "then": {"required": ["error"], "properties": {"error": {"type": "object"}}}
+    }
+  ],
+  "required": ["mapping_id", "status", "observations", "error"],
+  "properties": {
+    "schema_version": true,
+    "run_id": true,
+    "task_id": true,
+    "submission_sha256": true,
+    "mapping_id": {
+      "description": "검사에 사용한 매핑 ID. mapping.json의 mapping_id와 같아야 한다. 과제에 operations가 없으면 null.",
+      "type": ["string", "null"]
+    },
+    "status": {"enum": ["complete", "execution_error"]},
+    "observations": {
+      "description": "실행 실패 시에도 이미 완료된 관측 행은 보존할 수 있다.",
+      "type": "array",
+      "items": {"$ref": "common.schema.json#/$defs/observation_row"}
+    },
+    "error": {
+      "description": "execution_error일 때 stage와 message가 필수. complete이면 null.",
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stage", "message"],
+          "properties": {
+            "stage": {"type": "string", "minLength": 1},
+            "message": {"type": "string"},
+            "test_id": {"$ref": "common.schema.json#/$defs/test_id"},
+            "round": {"type": "integer", "minimum": 1}
+          }
+        }
+      ]
+    },
+    "runner_info": {
+      "description": "실행기와 도구 버전 정보(선택)",
+      "type": "object",
+      "properties": {
+        "runner_id": {"type": "string"},
+        "database_mode": {"enum": ["engine_managed", "external"]},
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "version"],
+            "properties": {
+              "id": {"type": "string"},
+              "version": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  },
+  "unevaluatedProperties": false
+}
