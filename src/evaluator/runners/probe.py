@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from evaluator.runners.templates import (
     FieldError,
     TemplateError,
+    malformed_placeholders,
     read_outputs,
     render_request,
     variables_in,
@@ -57,6 +58,9 @@ class UrllibTransport:
             raise TransportError(str(getattr(err, "reason", err))) from err
 
 
+TEMPLATE_KEYS = ("path_template", "query_template", "headers_template", "body_template")
+
+
 def validate_candidate(candidate: Any, operations: dict[str, Any]) -> str | None:
     """Semantic checks on a mapping candidate. Returns an error message or None.
 
@@ -87,12 +91,22 @@ def validate_candidate(candidate: Any, operations: dict[str, Any]) -> str | None
         for name, field_spec in fields.items():
             if not isinstance(field_spec, dict) or not isinstance(field_spec.get("pointer"), str):
                 return f"{op_name}: response_fields.{name}.pointer must be a string"
-        used = set()
-        for key in ("path_template", "query_template", "headers_template", "body_template"):
-            used |= variables_in(call.get(key))
+        templates = [call.get(key) for key in TEMPLATE_KEYS]
+        malformed = set().union(*(malformed_placeholders(t) for t in templates))
+        if malformed:
+            return (
+                f"{op_name}: malformed placeholders {sorted(malformed)}; "
+                f"write variables as {{name}} using the declared inputs {sorted(spec['inputs'])}"
+            )
+        used = set().union(*(variables_in(t) for t in templates))
         unknown = used - set(spec["inputs"])
         if unknown:
             return f"{op_name}: unknown template variables {sorted(unknown)}"
+        links = {name: s["from"] for name, s in spec["inputs"].items() if s.get("from")}
+        unused = sorted(set(links) - used)
+        if unused:
+            hints = ", ".join(f"{{{name}}} (filled from {links[name]})" for name in unused)
+            return f"{op_name}: linked inputs are not used; put {hints} where the request takes that value"
     return None
 
 

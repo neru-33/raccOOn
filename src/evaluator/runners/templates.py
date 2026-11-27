@@ -12,6 +12,8 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 _VAR = re.compile(r"\{([a-z][a-z0-9_]*)\}")
+_BRACED = re.compile(r"\$?\{+[^{}\s\"']+\}+")
+"""Brace tokens that look like a placeholder: ``{x}``, ``{{x}}``, ``${x}``, ``{a.b}``."""
 
 
 class TemplateError(ValueError):
@@ -26,6 +28,20 @@ def variables_in(template: Any) -> set[str]:
         return set().union(*(variables_in(v) for v in template.values())) if template else set()
     if isinstance(template, list):
         return set().union(*(variables_in(v) for v in template)) if template else set()
+    return set()
+
+
+def malformed_placeholders(template: Any) -> set[str]:
+    """Placeholder-like tokens that are not a ``{variable}``, such as ``{{a}}``, ``${a}`` or ``{a.b}``.
+
+    These would otherwise be sent as literal text.
+    """
+    if isinstance(template, str):
+        return {m.group() for m in _BRACED.finditer(template) if not _VAR.fullmatch(m.group())}
+    if isinstance(template, dict):
+        return set().union(*(malformed_placeholders(v) for v in template.values())) if template else set()
+    if isinstance(template, list):
+        return set().union(*(malformed_placeholders(v) for v in template)) if template else set()
     return set()
 
 

@@ -81,12 +81,29 @@ def test_valid_candidate_passes_semantic_checks() -> None:
         (lambda c: c["create_reservation"]["response_fields"].pop("confirmed"), "response_fields"),
         (lambda c: c["create_reservation"].update(body_template={"x": "{secret}"}), "unknown template variables"),
         (lambda c: c["create_reservation"].update(protocol="grpc"), "protocol"),
+        (
+            lambda c: c["create_reservation"]["body_template"].update(session="{{create_event.event_id}}"),
+            "malformed placeholders ['{{create_event.event_id}}']",
+        ),
+        (lambda c: c["create_reservation"]["body_template"].update(session="{{event_id}}"), "malformed"),
+        (lambda c: c["create_reservation"]["body_template"].update(session="${event_id}"), "malformed"),
+        (lambda c: c["create_reservation"]["body_template"].update(session="{eventId}"), "malformed"),
+        (
+            lambda c: c["create_reservation"]["body_template"].update(session="s-1"),
+            "{event_id} (filled from create_event.event_id)",
+        ),
     ],
 )
 def test_invalid_candidates_are_rejected(mutate, fragment: str) -> None:
     candidate = _candidate("oversell")
     mutate(candidate)
     assert fragment in validate_candidate(candidate, OPS)
+
+
+def test_literal_braces_that_are_not_placeholders_pass() -> None:
+    candidate = _candidate("oversell")
+    candidate["create_event"]["body_template"]["note"] = '{"raw": "json text"} and {not a placeholder}'
+    assert validate_candidate(candidate, OPS) is None
 
 
 def test_sequence_verifies_linked_operations() -> None:
